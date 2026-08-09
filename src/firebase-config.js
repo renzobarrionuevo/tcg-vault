@@ -29,4 +29,11 @@
 //   messagingSenderId: '123456789',
 //   appId: '1:123456789:web:abc123',
 // }
-export const firebaseConfig = null
+export const firebaseConfig = {
+  apiKey: "AIzaSy...",
+  authDomain: "tcg-vault-xxxxx.firebaseapp.com",
+  projectId: "tcg-vault-xxxxx",
+  storageBucket: "tcg-vault-xxxxx.firebasestorage.app",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abc123"
+};
