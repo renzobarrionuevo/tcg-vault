@@ -30,10 +30,10 @@
 //   appId: '1:123456789:web:abc123',
 // }
 export const firebaseConfig = {
-  apiKey: "AIzaSy...",
-  authDomain: "tcg-vault-xxxxx.firebaseapp.com",
-  projectId: "tcg-vault-xxxxx",
-  storageBucket: "tcg-vault-xxxxx.firebasestorage.app",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abc123"
+  apiKey: "AIzaSyAXnkpS0rojn9h1EiYHV4QkbXI-L3d-fC4",
+  authDomain: "tcg-vault-905a8.firebaseapp.com",
+  projectId: "tcg-vault-905a8",
+  storageBucket: "tcg-vault-905a8.firebasestorage.app",
+  messagingSenderId: "1029915700732",
+  appId: "1:1029915700732:web:27ff10119d7c2ee9f45679"
 };
