@@ -19,7 +19,7 @@ export const syncEnabled = !!firebaseConfig
 // id de este cliente (pestaña/dispositivo) para ignorar nuestros propios ecos
 const CLIENT_ID = `cl_${Math.random().toString(36).slice(2, 10)}`
 
-let fb = null // { auth, db, doc, setDoc, onSnapshot, ... } cargado bajo demanda
+let fb = null // { auth, db, ... } cargado bajo demanda
 
 async function init() {
   if (!syncEnabled) return null
@@ -30,8 +30,19 @@ async function init() {
     import('firebase/firestore'),
   ])
   const app = initializeApp(firebaseConfig)
+  // Persistencia de sesión en localStorage (NO IndexedDB): evita el error
+  // "Database is closing/hidden" que da IndexedDB en algunos navegadores.
+  let auth
+  try {
+    auth = authMod.initializeAuth(app, {
+      persistence: authMod.browserLocalPersistence,
+      popupRedirectResolver: authMod.browserPopupRedirectResolver,
+    })
+  } catch {
+    auth = authMod.getAuth(app)
+  }
   fb = {
-    auth: authMod.getAuth(app),
+    auth,
     db: fsMod.getFirestore(app),
     authMod,
     fsMod,
