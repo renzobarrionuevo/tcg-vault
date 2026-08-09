@@ -59,7 +59,39 @@ Para probar el pipeline con un solo set: `node scripts/fetch-data.mjs --only-gro
 
 ## Importante: dónde viven tus datos
 
-Tu colección se guarda **en el navegador que uses** (localStorage). Si limpiás los datos del navegador o cambiás de dispositivo, usá **Ajustes → Exportar JSON** para respaldar y **Importar** para restaurar. Exportá un respaldo cada tanto.
+Sin iniciar sesión, tu colección se guarda **en el navegador que uses** (localStorage). Si limpiás los datos del navegador o cambiás de dispositivo, usá **Ajustes → Exportar JSON** para respaldar y **Importar** para restaurar.
+
+Con la sincronización activada (ver siguiente sección), al **entrar con Google** la colección se guarda además en la nube (Firestore) y se mantiene igual en todos tus dispositivos, en tiempo real.
+
+## Sincronización entre dispositivos (login con Google) — opcional y gratis
+
+Usa **Firebase** (plan gratuito Spark, no pide tarjeta). Pasos, una sola vez:
+
+1. **Crear el proyecto**: entrá a [console.firebase.google.com](https://console.firebase.google.com) con tu cuenta de Google → **Add project / Crear proyecto** → nombre (ej: `tcg-vault`) → podés desactivar Analytics → Crear.
+2. **Registrar la app web**: en la pantalla principal del proyecto tocá el ícono **`</>`** (Web) → nombre cualquiera → **Register app**. Te muestra un bloque `const firebaseConfig = { apiKey: ..., authDomain: ..., ... }` — **copiá esos valores**.
+3. **Pegar la config**: en tu repo de GitHub editá el archivo `src/firebase-config.js` y reemplazá `export const firebaseConfig = null` por tu objeto (el archivo tiene un ejemplo comentado del formato exacto).
+4. **Habilitar Google como método de acceso**: en la consola de Firebase → **Build → Authentication → Get started → Sign-in method → Google → Enable** (elegí tu email de soporte) → Save.
+5. **Autorizar tu dominio**: en **Authentication → Settings → Authorized domains → Add domain** → agregá `TU_USUARIO.github.io`.
+6. **Crear la base de datos**: **Build → Firestore Database → Create database** → modo producción → listo. Después, en la pestaña **Rules**, pegá esto y tocá **Publish**:
+
+   ```
+   rules_version = '2';
+   service cloud.firestore {
+     match /databases/{database}/documents {
+       match /vaults/{userId} {
+         allow read, write: if request.auth != null && request.auth.uid == userId;
+       }
+     }
+   }
+   ```
+
+   (Estas reglas hacen que cada usuario solo pueda leer y escribir SU colección.)
+
+7. Commit del cambio en `src/firebase-config.js` → el workflow redeploya solo → aparece el botón **«Entrar con Google»** en la app.
+
+Los valores del `firebaseConfig` no son secretos: identifican al proyecto públicamente y la seguridad la dan las reglas de Firestore y la lista de dominios autorizados.
+
+> Límite del plan gratuito: de sobra para uso personal (50.000 lecturas/día). La colección se guarda como un documento por usuario; hasta ~3.000 cartas por cuenta.
 
 ## API key opcional (Pokémon)
 

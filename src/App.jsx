@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import AddCard from './components/AddCard.jsx'
 import CollectionTable from './components/CollectionTable.jsx'
 import Settings from './components/Settings.jsx'
@@ -6,16 +6,63 @@ import { loadCollection, saveCollection } from './lib/storage.js'
 import { totals, fmtMoney } from './lib/helpers.js'
 import { refreshCsvPrices } from './api/tcgcsv.js'
 import { refreshPtcgPrices } from './api/pokemontcg.js'
+import { syncEnabled, onAuthChange, signInWithGoogle, signOut, initialMerge, pushItems, onRemoteChange } from './api/sync.js'
 
 export default function App() {
   const [items, setItems] = useState(loadCollection)
   const [tab, setTab] = useState('col')
   const [msg, setMsg] = useState('')
   const [refreshing, setRefreshing] = useState(null) // null | {done, total}
+  const [user, setUser] = useState(null)
+  const skipNextPush = useRef(false) // true cuando el cambio vino de la nube
+  const pushTimer = useRef(null)
 
+  // sesión de Google (si Firebase está configurado)
+  useEffect(() => {
+    if (!syncEnabled) return
+    return onAuthChange(setUser)
+  }, [])
+
+  // al iniciar sesión: combinar local + nube, y escuchar cambios de otros dispositivos
+  useEffect(() => {
+    if (!user) return
+    let unsub = () => {}
+    let cancelled = false
+    ;(async () => {
+      try {
+        const merged = await initialMerge(user.uid, loadCollection())
+        if (cancelled) return
+        skipNextPush.current = true
+        setItems(merged)
+        toast(`Sincronizado con tu cuenta (${merged.length} cartas).`)
+        unsub = onRemoteChange(user.uid, (remoteItems) => {
+          skipNextPush.current = true
+          setItems(remoteItems)
+        })
+      } catch (err) {
+        toast(`Error de sincronización: ${err.message}`)
+      }
+    })()
+    return () => {
+      cancelled = true
+      unsub()
+    }
+  }, [user])
+
+  // persistir: siempre local; si hay sesión, también a la nube (con debounce)
   useEffect(() => {
     saveCollection(items)
-  }, [items])
+    if (!user) return
+    if (skipNextPush.current) {
+      skipNextPush.current = false
+      return
+    }
+    window.clearTimeout(pushTimer.current)
+    pushTimer.current = window.setTimeout(() => {
+      pushItems(user.uid, items).catch((err) => toast(`No pude guardar en la nube: ${err.message}`))
+    }, 800)
+    return () => window.clearTimeout(pushTimer.current)
+  }, [items, user])
 
   function toast(text) {
     setMsg(text)
@@ -92,6 +139,29 @@ export default function App() {
           <Stat label="Valor de mercado" value={fmtMoney(t.value)} />
           <Stat label="Ganancia / Pérdida" value={`${t.pl >= 0 ? '+' : ''}${fmtMoney(t.pl)}`} tone={t.pl >= 0 ? 'gain' : 'loss'} />
         </div>
+        {syncEnabled && (
+          <div className="auth">
+            {user ? (
+              <>
+                {user.photo && <img className="avatar" src={user.photo} alt="" referrerPolicy="no-referrer" />}
+                <div className="auth-info">
+                  <span className="auth-name">{user.name || user.email}</span>
+                  <span className="auth-state">✓ sincronizado</span>
+                </div>
+                <button className="btn" onClick={() => signOut().catch(() => {})}>
+                  Salir
+                </button>
+              </>
+            ) : (
+              <button
+                className="btn"
+                onClick={() => signInWithGoogle().catch((err) => toast(`No pude iniciar sesión: ${err.message}`))}
+              >
+                Entrar con Google
+              </button>
+            )}
+          </div>
+        )}
       </header>
 
       <nav className="tabs">

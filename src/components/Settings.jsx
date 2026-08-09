@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { loadSettings, saveSettings, exportCollection, parseBackupFile, mergeCollections } from '../lib/storage.js'
 import { getMeta } from '../api/tcgcsv.js'
 import { fmtDate } from '../lib/helpers.js'
+import { syncEnabled } from '../api/sync.js'
 
 export default function Settings({ items, onReplaceCollection, toast }) {
   const [apiKey, setApiKey] = useState(() => loadSettings().ptcgApiKey || '')
@@ -69,6 +70,22 @@ export default function Settings({ items, onReplaceCollection, toast }) {
             Guardar
           </button>
         </div>
+      </section>
+
+      <section>
+        <h3>Sincronización entre dispositivos</h3>
+        {syncEnabled ? (
+          <p className="hint">
+            Firebase está configurado ✓ — usá el botón <strong>«Entrar con Google»</strong> (arriba) en cada
+            dispositivo y tu colección se mantiene sincronizada sola.
+          </p>
+        ) : (
+          <p className="hint">
+            Desactivada. Para activarla, creá un proyecto gratuito en Firebase y pegá su configuración en el archivo{' '}
+            <code>src/firebase-config.js</code> del repositorio (las instrucciones están dentro del archivo y en el
+            README). Mientras tanto, tu colección vive solo en este navegador.
+          </p>
+        )}
       </section>
 
       <section>
