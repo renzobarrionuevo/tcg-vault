@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import AddCard from './components/AddCard.jsx'
 import CollectionTable from './components/CollectionTable.jsx'
 import Settings from './components/Settings.jsx'
-import { loadCollection, saveCollection } from './lib/storage.js'
+import { loadCollection, saveCollection, mergeCollections } from './lib/storage.js'
 import { totals, fmtMoney } from './lib/helpers.js'
 import { refreshCsvPrices } from './api/tcgcsv.js'
 import { refreshPtcgPrices } from './api/pokemontcg.js'
@@ -14,8 +14,13 @@ export default function App() {
   const [msg, setMsg] = useState('')
   const [refreshing, setRefreshing] = useState(null) // null | {done, total}
   const [user, setUser] = useState(null)
-  const skipNextPush = useRef(false) // true cuando el cambio vino de la nube
+  // estado de la nube: 'off' | 'syncing' | 'saved' | 'pending' | 'error'
+  const [cloud, setCloud] = useState({ state: 'off', at: null })
+  const synced = useRef(false) // true recién cuando terminó la combinación inicial
+  const lastPushed = useRef(null) // JSON de lo último confirmado en la nube
   const pushTimer = useRef(null)
+  const itemsRef = useRef(items)
+  itemsRef.current = items
 
   // sesión de Google (si Firebase está configurado)
   useEffect(() => {
@@ -23,46 +28,97 @@ export default function App() {
     return onAuthChange(setUser)
   }, [])
 
-  // al iniciar sesión: combinar local + nube, y escuchar cambios de otros dispositivos
+  // al iniciar sesión: PRIMERO bajar la nube y combinar; hasta que eso no
+  // termine (synced=true) este dispositivo tiene prohibido subir nada.
   useEffect(() => {
-    if (!user) return
+    if (!user) {
+      synced.current = false
+      lastPushed.current = null
+      setCloud({ state: 'off', at: null })
+      return
+    }
     let unsub = () => {}
     let cancelled = false
+    setCloud({ state: 'syncing', at: null })
     ;(async () => {
       try {
         const merged = await initialMerge(user.uid, loadCollection())
         if (cancelled) return
-        skipNextPush.current = true
+        lastPushed.current = JSON.stringify(merged)
+        synced.current = true
         setItems(merged)
+        setCloud({ state: 'saved', at: new Date() })
         toast(`Sincronizado con tu cuenta (${merged.length} cartas).`)
         unsub = onRemoteChange(user.uid, (remoteItems) => {
-          skipNextPush.current = true
-          setItems(remoteItems)
+          const localJson = JSON.stringify(itemsRef.current)
+          if (localJson !== lastPushed.current) {
+            // hay cambios locales sin subir → combinar en vez de pisar
+            const combined = mergeCollections(remoteItems, itemsRef.current)
+            setItems(combined) // queda distinto de lastPushed → se re-sube solo
+          } else {
+            lastPushed.current = JSON.stringify(remoteItems)
+            setItems(remoteItems)
+            setCloud({ state: 'saved', at: new Date() })
+          }
         })
       } catch (err) {
+        setCloud({ state: 'error', at: null })
         toast(`Error de sincronización: ${err.message}`)
       }
     })()
     return () => {
       cancelled = true
+      synced.current = false
       unsub()
     }
   }, [user])
 
-  // persistir: siempre local; si hay sesión, también a la nube (con debounce)
+  // persistir: siempre local; a la nube solo cambios reales y solo después
+  // de la sincronización inicial (así un dispositivo "vacío" jamás pisa la nube)
   useEffect(() => {
     saveCollection(items)
-    if (!user) return
-    if (skipNextPush.current) {
-      skipNextPush.current = false
-      return
-    }
+    if (!user || !synced.current) return
+    const json = JSON.stringify(items)
+    if (json === lastPushed.current) return // vino de la nube o ya está subido
+    setCloud({ state: 'pending', at: null })
     window.clearTimeout(pushTimer.current)
-    pushTimer.current = window.setTimeout(() => {
-      pushItems(user.uid, items).catch((err) => toast(`No pude guardar en la nube: ${err.message}`))
-    }, 800)
+    pushTimer.current = window.setTimeout(async () => {
+      try {
+        await pushItems(user.uid, items)
+        lastPushed.current = json
+        setCloud({ state: 'saved', at: new Date() })
+      } catch (err) {
+        setCloud({ state: 'error', at: null })
+        toast(`No pude guardar en la nube: ${err.message}`)
+      }
+    }, 400)
     return () => window.clearTimeout(pushTimer.current)
   }, [items, user])
+
+  // red de seguridad: si cerrás/minimizás la pestaña con un guardado pendiente,
+  // se intenta subir inmediatamente
+  useEffect(() => {
+    if (!user) return
+    function flush() {
+      if (!synced.current) return
+      if (JSON.stringify(itemsRef.current) !== lastPushed.current) {
+        pushItems(user.uid, itemsRef.current)
+          .then(() => {
+            lastPushed.current = JSON.stringify(itemsRef.current)
+          })
+          .catch(() => {})
+      }
+    }
+    function onHide() {
+      if (document.visibilityState === 'hidden') flush()
+    }
+    window.addEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', onHide)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', onHide)
+    }
+  }, [user])
 
   function toast(text) {
     setMsg(text)
@@ -146,7 +202,7 @@ export default function App() {
                 {user.photo && <img className="avatar" src={user.photo} alt="" referrerPolicy="no-referrer" />}
                 <div className="auth-info">
                   <span className="auth-name">{user.name || user.email}</span>
-                  <span className="auth-state">✓ sincronizado</span>
+                  <CloudState cloud={cloud} />
                 </div>
                 <button className="btn" onClick={() => signOut().catch(() => {})}>
                   Salir
@@ -212,4 +268,21 @@ function Stat({ label, value, tone }) {
       <strong className={tone || ''}>{value}</strong>
     </div>
   )
+}
+
+/** Indicador del estado de guardado en la nube. */
+function CloudState({ cloud }) {
+  const hora = (d) => d?.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  switch (cloud.state) {
+    case 'syncing':
+      return <span className="auth-state" style={{ color: 'var(--muted)' }}>⟳ sincronizando…</span>
+    case 'pending':
+      return <span className="auth-state" style={{ color: 'var(--muted)' }}>⟳ guardando…</span>
+    case 'saved':
+      return <span className="auth-state">✓ guardado en la nube {cloud.at ? hora(cloud.at) : ''}</span>
+    case 'error':
+      return <span className="auth-state" style={{ color: 'var(--loss)' }}>⚠ error al guardar</span>
+    default:
+      return null
+  }
 }
