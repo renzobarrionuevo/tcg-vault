@@ -3,7 +3,15 @@ import AddCard from './components/AddCard.jsx'
 import CollectionTable from './components/CollectionTable.jsx'
 import Settings from './components/Settings.jsx'
 import GamePicker from './components/GamePicker.jsx'
+import Icon from './components/Icon.jsx'
 import logo from './assets/logo-tcg-vault.png'
+
+/** Pestañas de la colección. `title` es lo que se lee cuando el texto se oculta. */
+const TABS = [
+  { id: 'col', icon: 'cards', label: 'Colección', title: 'Colección' },
+  { id: 'add', icon: 'plus', label: '+ Agregar', title: 'Agregar carta' },
+  { id: 'set', icon: 'sliders', label: 'Ajustes', title: 'Ajustes' },
+]
 import { loadCollection, saveCollection, mergeCollections } from './lib/storage.js'
 import { totals, fmtMoney, GAME_LABEL } from './lib/helpers.js'
 import { refreshCsvPrices } from './api/tcgcsv.js'
@@ -197,7 +205,9 @@ export default function App() {
         <div className="brand">
           <img className="logo" src={logo} alt="TCG Vault" />
           <div>
-            <h1>TCG Vault</h1>
+            <h1>
+              TCG <span>Vault</span>
+            </h1>
             <p>{game ? `Colección de ${GAME_LABEL[game]}` : 'Pokémon & One Piece · precios de TCGPlayer'}</p>
           </div>
         </div>
@@ -232,21 +242,36 @@ export default function App() {
 
       {game && (
         <nav className="tabs">
-          <button className="btn ghost back" onClick={() => setGame(null)} title="Volver a elegir juego">
-            ← Juegos
+          <button className="btn ghost back" onClick={() => setGame(null)} title="Volver a elegir juego" aria-label="Volver a elegir juego">
+            <Icon name="back" />
+            <span className="tab-text">← Juegos</span>
           </button>
-          <button className={tab === 'col' ? 'on' : ''} onClick={() => setTab('col')}>
-            Colección
-          </button>
-          <button className={tab === 'add' ? 'on' : ''} onClick={() => setTab('add')}>
-            + Agregar
-          </button>
-          <button className={tab === 'set' ? 'on' : ''} onClick={() => setTab('set')}>
-            Ajustes
-          </button>
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              className={tab === t.id ? 'on' : ''}
+              onClick={() => setTab(t.id)}
+              title={t.title}
+              aria-label={t.title}
+            >
+              <Icon name={t.icon} />
+              <span className="tab-text">{t.label}</span>
+            </button>
+          ))}
           <div className="spacer" />
-          <button className="btn primary" onClick={refreshPrices} disabled={!!refreshing || !scoped.length}>
-            {refreshing ? `Actualizando ${refreshing.done}/${refreshing.total}…` : '↻ Actualizar precios'}
+          <button
+            className="btn primary"
+            onClick={refreshPrices}
+            disabled={!!refreshing || !scoped.length}
+            title="Actualizar precios"
+            aria-label="Actualizar precios"
+          >
+            <Icon name="refresh" className={refreshing ? 'spin' : ''} />
+            <span className="tab-text">
+              {refreshing ? `Actualizando ${refreshing.done}/${refreshing.total}…` : 'Actualizar precios'}
+            </span>
+            {/* en celular el texto se oculta: el progreso se muestra igual, compacto */}
+            {refreshing && <span className="tab-progress">{`${refreshing.done}/${refreshing.total}`}</span>}
           </button>
         </nav>
       )}
@@ -270,7 +295,7 @@ export default function App() {
           <a href="https://pokemontcg.io" target="_blank" rel="noreferrer">
             pokemontcg.io
           </a>
-          , actualizados a diario. Los datos de tu colección se guardan solo en tu navegador.
+          .
         </p>
       </footer>
     </div>

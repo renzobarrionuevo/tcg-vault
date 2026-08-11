@@ -7,6 +7,13 @@
   --muted: #8b98a8;
   --accent: #4f8ff7;
   --accent2: #9a5cf5;
+  /* Colores de marca, tomados del logo: el rojo de la cinta y el amarillo
+     del sombrero. Van sin degradado —mezclados dan un naranja sucio— y son
+     aparte de --accent a propósito: enlaces, foco y chips siguen en azul. */
+  --brand-red: #e5484d;
+  --brand-gold: #f5c518;
+  /* texto oscuro: sobre el dorado el blanco no se lee */
+  --on-brand: #1b1205;
   --gain: #3fb950;
   --loss: #f85149;
   --radius: 10px;
@@ -55,13 +62,15 @@ header {
   flex-shrink: 0;
 }
 
+/* «TCG» en el rojo de la cinta, «Vault» en el amarillo del sombrero */
 .brand h1 {
   margin: 0;
   font-size: 1.45rem;
-  background: linear-gradient(90deg, var(--accent), var(--accent2));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--brand-red);
+}
+
+.brand h1 span {
+  color: var(--brand-gold);
 }
 
 .brand p {
@@ -147,6 +156,12 @@ header {
   margin-bottom: 18px;
 }
 
+.tabs > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
 .tabs > button:not(.btn) {
   background: none;
   border: none;
@@ -155,6 +170,37 @@ header {
   padding: 8px 14px;
   border-radius: 8px;
   cursor: pointer;
+}
+
+/* En escritorio manda el texto; los iconos aparecen recién en celular
+   (ver el media query del final). */
+.tabs .icon {
+  display: none;
+  width: 19px;
+  height: 19px;
+  flex-shrink: 0;
+}
+
+.tabs .icon.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tabs .icon.spin {
+    animation: none;
+  }
+}
+
+.tab-progress {
+  display: none;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 
 .tabs > button:not(.btn):hover {
@@ -338,9 +384,14 @@ header {
 }
 
 .btn.primary {
-  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  background: var(--brand-gold);
   border: none;
-  font-weight: 600;
+  color: var(--on-brand);
+  font-weight: 700;
+}
+
+.btn.primary:hover:not(:disabled) {
+  filter: brightness(1.08);
 }
 
 .btn.ghost {
@@ -829,6 +880,29 @@ footer a {
   .stat {
     flex: 1;
     min-width: 90px;
+  }
+
+  /* la barra pasa a iconos: el texto se va, el icono aparece */
+  .tabs .tab-text {
+    display: none;
+  }
+
+  .tabs .icon {
+    display: block;
+  }
+
+  .tabs > button:not(.btn) {
+    padding: 9px 13px;
+  }
+
+  .tabs .back {
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+
+  /* el progreso de la actualización sigue visible aunque no haya texto */
+  .tab-progress {
+    display: inline;
   }
 
   .game-banners {
