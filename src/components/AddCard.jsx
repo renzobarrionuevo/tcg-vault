@@ -3,13 +3,15 @@ import { search } from '../lib/search.js'
 import { GAME_LABEL, variantLabel, defaultVariant, fmtMoney, CONDITIONS } from '../lib/helpers.js'
 import { newUid } from '../lib/storage.js'
 
-export default function AddCard({ onAdd }) {
+/** Alta de cartas acotada a un juego: lo que sea del otro no se puede agregar acá. */
+export default function AddCard({ onAdd, game }) {
   const [query, setQuery] = useState('')
-  const [game, setGame] = useState('all')
   const [busy, setBusy] = useState(false)
   const [results, setResults] = useState(null)
   const [note, setNote] = useState('')
   const [selected, setSelected] = useState(null)
+
+  const other = game === 'pk' ? 'op' : 'pk'
 
   async function runSearch(e) {
     e?.preventDefault()
@@ -19,9 +21,16 @@ export default function AddCard({ onAdd }) {
     setNote('')
     try {
       const res = await search(query, game)
-      setResults(res.results)
-      setNote(res.note || '')
-      if (res.results.length === 1) setSelected(res.results[0])
+      // la búsqueda por URL/código puede traer una carta del otro juego: se descarta
+      const mine = res.results.filter((r) => r.game === game)
+      const descartadas = res.results.length - mine.length
+      setResults(mine)
+      setNote(
+        !mine.length && descartadas
+          ? `Esa carta es de ${GAME_LABEL[other]}. Volvé a «Juegos» y entrá a la colección de ${GAME_LABEL[other]} para agregarla.`
+          : res.note || ''
+      )
+      if (mine.length === 1) setSelected(mine[0])
     } catch (err) {
       setResults([])
       setNote(`Error buscando: ${err.message}`)
@@ -37,21 +46,16 @@ export default function AddCard({ onAdd }) {
           className="search-input"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Pegá la URL de TCGPlayer, un código (OP01-001 / sv4-123) o un nombre…"
+          placeholder={`Pegá la URL de TCGPlayer, un código (${game === 'op' ? 'OP01-001' : 'sv4-123'}) o un nombre…`}
           autoFocus
         />
-        <select value={game} onChange={(e) => setGame(e.target.value)} title="Juego (para búsqueda por nombre)">
-          <option value="all">Ambos juegos</option>
-          <option value="pk">Pokémon</option>
-          <option value="op">One Piece</option>
-        </select>
         <button className="btn primary" disabled={busy || !query.trim()}>
           {busy ? 'Buscando…' : 'Buscar'}
         </button>
       </form>
       <p className="hint">
-        Ejemplos: <code>https://www.tcgplayer.com/product/543603/…</code> · <code>OP01-121</code> ·{' '}
-        <code>sv4-182</code> · <code>charizard</code>
+        Agregando a <b>{GAME_LABEL[game]}</b>. Ejemplos: <code>https://www.tcgplayer.com/product/543603/…</code> ·{' '}
+        <code>{game === 'op' ? 'OP01-121' : 'sv4-182'}</code> · <code>{game === 'op' ? 'zoro' : 'charizard'}</code>
       </p>
 
       {note && <p className="note">{note}</p>}

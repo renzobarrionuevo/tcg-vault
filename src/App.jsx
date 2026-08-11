@@ -1,15 +1,18 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import AddCard from './components/AddCard.jsx'
 import CollectionTable from './components/CollectionTable.jsx'
 import Settings from './components/Settings.jsx'
+import GamePicker from './components/GamePicker.jsx'
+import logo from './assets/logo-tcg-vault.png'
 import { loadCollection, saveCollection, mergeCollections } from './lib/storage.js'
-import { totals, fmtMoney } from './lib/helpers.js'
+import { totals, fmtMoney, GAME_LABEL } from './lib/helpers.js'
 import { refreshCsvPrices } from './api/tcgcsv.js'
 import { refreshPtcgPrices } from './api/pokemontcg.js'
 import { syncEnabled, onAuthChange, signInWithGoogle, signOut, initialMerge, pushItems, onRemoteChange } from './api/sync.js'
 
 export default function App() {
   const [items, setItems] = useState(loadCollection)
+  const [game, setGame] = useState(null) // null = pantalla de elección de juego
   const [tab, setTab] = useState('col')
   const [msg, setMsg] = useState('')
   const [refreshing, setRefreshing] = useState(null) // null | {done, total}
@@ -140,10 +143,18 @@ export default function App() {
     setItems((prev) => prev.filter((it) => it.uid !== uid))
   }
 
+  // todo lo visible (tabla, totales, refresco de precios) es del juego elegido
+  const scoped = useMemo(() => (game ? items.filter((it) => it.game === game) : items), [items, game])
+
+  function pickGame(id) {
+    setGame(id)
+    setTab('col')
+  }
+
   async function refreshPrices() {
-    if (refreshing || !items.length) return
-    const csvIds = items.filter((it) => it.source === 'csv').map((it) => it.sourceId)
-    const ptcgIds = items.filter((it) => it.source === 'ptcg').map((it) => it.sourceId)
+    if (refreshing || !scoped.length) return
+    const csvIds = scoped.filter((it) => it.source === 'csv').map((it) => it.sourceId)
+    const ptcgIds = scoped.filter((it) => it.source === 'ptcg').map((it) => it.sourceId)
     const total = new Set(csvIds).size + new Set(ptcgIds).size
     setRefreshing({ done: 0, total })
     let done = 0
@@ -159,6 +170,7 @@ export default function App() {
       const now = new Date().toISOString()
       let updated = 0
       const next = items.map((it) => {
+        if (game && it.game !== game) return it // el otro juego no se toca
         const map = it.source === 'csv' ? csvMap : ptcgMap
         const variants = map.get(it.sourceId)
         const price = variants?.[it.variant]?.market
@@ -169,7 +181,7 @@ export default function App() {
         return it
       })
       setItems(next)
-      toast(`Precios actualizados (${updated} de ${items.length} cartas).`)
+      toast(`Precios actualizados (${updated} de ${scoped.length} cartas).`)
     } catch (err) {
       toast(`Error actualizando precios: ${err.message}`)
     } finally {
@@ -177,23 +189,21 @@ export default function App() {
     }
   }
 
-  const t = totals(items)
+  const t = totals(scoped)
 
   return (
     <div className="app">
       <header>
         <div className="brand">
-          <span className="logo">🃏</span>
+          <img className="logo" src={logo} alt="TCG Vault" />
           <div>
             <h1>TCG Vault</h1>
-            <p>Pokémon & One Piece · precios de TCGPlayer</p>
+            <p>{game ? `Colección de ${GAME_LABEL[game]}` : 'Pokémon & One Piece · precios de TCGPlayer'}</p>
           </div>
         </div>
         <div className="stats">
           <Stat label="Cartas" value={t.cards.toLocaleString()} />
-          <Stat label="Invertido" value={fmtMoney(t.invested)} />
           <Stat label="Valor de mercado" value={fmtMoney(t.value)} />
-          <Stat label="Ganancia / Pérdida" value={`${t.pl >= 0 ? '+' : ''}${fmtMoney(t.pl)}`} tone={t.pl >= 0 ? 'gain' : 'loss'} />
         </div>
         {syncEnabled && (
           <div className="auth">
@@ -220,28 +230,34 @@ export default function App() {
         )}
       </header>
 
-      <nav className="tabs">
-        <button className={tab === 'col' ? 'on' : ''} onClick={() => setTab('col')}>
-          Colección
-        </button>
-        <button className={tab === 'add' ? 'on' : ''} onClick={() => setTab('add')}>
-          + Agregar
-        </button>
-        <button className={tab === 'set' ? 'on' : ''} onClick={() => setTab('set')}>
-          Ajustes
-        </button>
-        <div className="spacer" />
-        <button className="btn primary" onClick={refreshPrices} disabled={!!refreshing || !items.length}>
-          {refreshing ? `Actualizando ${refreshing.done}/${refreshing.total}…` : '↻ Actualizar precios'}
-        </button>
-      </nav>
+      {game && (
+        <nav className="tabs">
+          <button className="btn ghost back" onClick={() => setGame(null)} title="Volver a elegir juego">
+            ← Juegos
+          </button>
+          <button className={tab === 'col' ? 'on' : ''} onClick={() => setTab('col')}>
+            Colección
+          </button>
+          <button className={tab === 'add' ? 'on' : ''} onClick={() => setTab('add')}>
+            + Agregar
+          </button>
+          <button className={tab === 'set' ? 'on' : ''} onClick={() => setTab('set')}>
+            Ajustes
+          </button>
+          <div className="spacer" />
+          <button className="btn primary" onClick={refreshPrices} disabled={!!refreshing || !scoped.length}>
+            {refreshing ? `Actualizando ${refreshing.done}/${refreshing.total}…` : '↻ Actualizar precios'}
+          </button>
+        </nav>
+      )}
 
       {msg && <div className="toast">{msg}</div>}
 
       <main>
-        {tab === 'col' && <CollectionTable items={items} onUpdate={updateItem} onRemove={removeItem} />}
-        {tab === 'add' && <AddCard onAdd={addItem} />}
-        {tab === 'set' && <Settings items={items} onReplaceCollection={setItems} toast={toast} />}
+        {!game && <GamePicker items={items} onPick={pickGame} />}
+        {game && tab === 'col' && <CollectionTable items={scoped} game={game} onUpdate={updateItem} onRemove={removeItem} />}
+        {game && tab === 'add' && <AddCard game={game} onAdd={addItem} />}
+        {game && tab === 'set' && <Settings items={items} onReplaceCollection={setItems} toast={toast} />}
       </main>
 
       <footer>
@@ -261,11 +277,11 @@ export default function App() {
   )
 }
 
-function Stat({ label, value, tone }) {
+function Stat({ label, value }) {
   return (
     <div className="stat">
       <span>{label}</span>
-      <strong className={tone || ''}>{value}</strong>
+      <strong>{value}</strong>
     </div>
   )
 }

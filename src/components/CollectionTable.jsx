@@ -17,28 +17,30 @@ function plOf(it) {
   return (m - it.paid) * (it.qty || 1)
 }
 
-export default function CollectionTable({ items, onUpdate, onRemove }) {
-  const [game, setGame] = useState('all')
+/** Recibe los items ya acotados a un juego (App decide cuál). */
+export default function CollectionTable({ items, game, onUpdate, onRemove }) {
   const [text, setText] = useState('')
   const [sort, setSort] = useState('added')
 
   const filtered = useMemo(() => {
     const needle = text.trim().toLowerCase()
     return items
-      .filter((it) => (game === 'all' ? true : it.game === game))
       .filter((it) =>
         !needle
           ? true
           : [it.name, it.set, it.num, it.rarity].filter(Boolean).some((f) => String(f).toLowerCase().includes(needle))
       )
       .sort(SORTS[sort].fn)
-  }, [items, game, text, sort])
+  }, [items, text, sort])
 
   if (!items.length) {
     return (
       <div className="empty">
-        <p>Todavía no registraste ninguna carta.</p>
-        <p className="hint">Andá a «Agregar» y pegá una URL de TCGPlayer o un código como OP01-001 o sv4-182.</p>
+        <p>Todavía no registraste ninguna carta de {GAME_LABEL[game]}.</p>
+        <p className="hint">
+          Andá a «Agregar» y pegá una URL de TCGPlayer o un código como{' '}
+          {game === 'op' ? 'OP01-001' : 'sv4-182'}.
+        </p>
       </div>
     )
   }
@@ -47,11 +49,6 @@ export default function CollectionTable({ items, onUpdate, onRemove }) {
     <div>
       <div className="filters">
         <input placeholder="Filtrar por nombre, set, código…" value={text} onChange={(e) => setText(e.target.value)} />
-        <select value={game} onChange={(e) => setGame(e.target.value)}>
-          <option value="all">Ambos juegos</option>
-          <option value="pk">Pokémon</option>
-          <option value="op">One Piece</option>
-        </select>
         <select value={sort} onChange={(e) => setSort(e.target.value)}>
           {Object.entries(SORTS).map(([k, v]) => (
             <option key={k} value={k}>
@@ -101,7 +98,7 @@ export default function CollectionTable({ items, onUpdate, onRemove }) {
                           )}
                         </div>
                         <div className="cc-meta">
-                          <span className={`chip ${it.game}`}>{GAME_LABEL[it.game]}</span> {it.set}
+                          {it.set}
                           {it.num ? ` · ${it.num}` : ''}
                           {it.rarity ? ` · ${it.rarity}` : ''}
                         </div>
