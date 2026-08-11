@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import RarityBar from './RarityBar.jsx'
 import { GAME_LABEL, variantLabel, fmtMoney, fmtDate, CONDITIONS, marketOf } from '../lib/helpers.js'
 
 const SORTS = {
@@ -47,6 +48,8 @@ export default function CollectionTable({ items, game, onUpdate, onRemove }) {
 
   return (
     <div>
+      <RarityBar items={items} game={game} />
+
       <div className="filters">
         <input placeholder="Filtrar por nombre, set, código…" value={text} onChange={(e) => setText(e.target.value)} />
         <select value={sort} onChange={(e) => setSort(e.target.value)}>

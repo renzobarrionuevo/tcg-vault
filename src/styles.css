@@ -49,8 +49,8 @@ header {
 }
 
 .brand .logo {
-  width: 46px;
-  height: 46px;
+  width: 58px;
+  height: 58px;
   object-fit: contain;
   flex-shrink: 0;
 }
@@ -533,6 +533,121 @@ select:focus {
 .af-market strong {
   font-size: 1.1rem;
   color: var(--text);
+}
+
+/* ── contador de rarezas ────────────────── */
+.rarity-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.rchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--rc, var(--border));
+  background: var(--rc-bg, var(--bg2));
+  font-size: 0.75rem;
+  line-height: 1;
+  cursor: default;
+}
+
+.rchip b {
+  color: var(--rc, var(--muted));
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+/* símbolo impreso en la carta (● ◆ ★ …), sólo en Pokémon */
+.rsym {
+  font-style: normal;
+  color: var(--rc, var(--muted));
+  letter-spacing: -0.12em; /* junta las estrellas de ★★ y ★★★ */
+  padding-right: 0.12em;
+}
+
+/* el contador, en una pastilla adentro del chip */
+.rchip > span {
+  padding: 4px 7px;
+  border-radius: 12px;
+  background: rgb(255 255 255 / 0.07);
+  color: var(--text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* las cuatro más buscadas llevan color propio; el resto queda apagado
+   para que la vista salte primero a lo que importa */
+.r-tr {
+  --rc: #f0b342;
+  --rc-bg: rgb(240 179 66 / 0.12);
+}
+
+.r-sec {
+  --rc: #c77dff;
+  --rc-bg: rgb(199 125 255 / 0.12);
+}
+
+.r-sr {
+  --rc: #4f8ff7;
+  --rc-bg: rgb(79 143 247 / 0.12);
+}
+
+.r-l {
+  --rc: #e5484d;
+  --rc-bg: rgb(229 72 77 / 0.12);
+}
+
+.r-r {
+  --rc: #3fb950;
+  --rc-bg: rgb(63 185 80 / 0.1);
+}
+
+/* Pokémon: el color imita el del símbolo impreso en la carta. */
+.r-oro {
+  --rc: #f5c518;
+  --rc-bg: rgb(245 197 24 / 0.12);
+}
+
+.r-plata {
+  --rc: #9db2cd;
+  --rc-bg: rgb(157 178 205 / 0.1);
+}
+
+/* brillo metálico, para que el plateado no se confunda con la tinta blanca */
+.r-plata .rsym {
+  background: linear-gradient(120deg, #ffffff, #8ea4c0 45%, #f2f7fc);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* el símbolo negro de la carta, aclarado: en negro sería invisible acá */
+.r-tinta {
+  --rc: #e6edf3;
+  --rc-bg: rgb(230 237 243 / 0.07);
+}
+
+.r-gris {
+  --rc: var(--muted);
+  --rc-bg: var(--bg2);
+}
+
+/* Rainbow Rare: degradado recortado sobre las estrellas */
+.r-arcoiris {
+  --rc: #b98bd9;
+  --rc-bg: rgb(185 139 217 / 0.1);
+}
+
+.r-arcoiris .rsym {
+  background: linear-gradient(90deg, #ff6b6b, #ffb454, #52d98a, #4f8ff7, #c77dff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 /* ── tabla colección ────────────────────── */
