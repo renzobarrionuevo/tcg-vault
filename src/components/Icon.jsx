@@ -39,6 +39,16 @@ const PATHS = {
       <circle cx="11.5" cy="17" r="2.2" />
     </>
   ),
+  // cruz → cerrar
+  close: (
+    <>
+      <path d="M18 6L6 18" />
+      <path d="M6 6l12 12" />
+    </>
+  ),
+  // chevrones ‹ › → anterior / siguiente en el modal
+  prev: <path d="M15 5l-7 7 7 7" />,
+  next: <path d="M9 5l7 7-7 7" />,
   // flecha circular → actualizar precios
   refresh: (
     <>

@@ -804,6 +804,153 @@ input.paid {
   text-align: right;
 }
 
+/* ── carta en grande (modal) ────────────── */
+/* la miniatura es un botón sin estilo: se ve igual pero avisa que se puede tocar */
+.thumb-btn {
+  display: block;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: zoom-in;
+  line-height: 0;
+  border-radius: 6px;
+}
+
+.thumb-btn:hover {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.thumb-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 0.75);
+  backdrop-filter: blur(3px);
+  cursor: zoom-out;
+}
+
+/* El modal mide exactamente lo que mide la carta: así las flechas, que se
+   posicionan respecto a él, quedan siempre en el mismo lugar aunque la
+   leyenda sea larga (la leyenda se ajusta a este ancho, no al revés). */
+.modal {
+  --card-w: min(92vw, calc(78vh * 63 / 88), 440px);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: var(--card-w);
+  cursor: default;
+}
+
+/* Marco fijo con proporción de carta (63:88). El ancho lo limita lo que
+   entre en alto (78vh), en ancho (92vw) o un tope de 440px; la leyenda va
+   debajo. Todas las cartas abren de este mismo tamaño. */
+.modal-figure {
+  width: 100%;
+  aspect-ratio: 63 / 88;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.modal-figure img,
+.modal-figure .noimg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 14px;
+}
+
+.modal-close {
+  position: absolute;
+  top: -14px;
+  right: -14px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.modal-close .icon {
+  width: 18px;
+  height: 18px;
+}
+
+.modal-close:hover {
+  border-color: var(--accent);
+}
+
+/* flechas a los costados de la carta, centradas en vertical */
+.modal-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  color: var(--text);
+  cursor: pointer;
+  z-index: 1;
+}
+
+.modal-nav .icon {
+  width: 22px;
+  height: 22px;
+}
+
+.modal-nav:hover {
+  border-color: var(--accent);
+}
+
+.modal-nav.prev {
+  left: -60px;
+}
+
+.modal-nav.next {
+  right: -60px;
+}
+
+.modal-count {
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.78rem;
+}
+
+.modal-caption {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+  overflow-wrap: anywhere; /* nombres larguísimos sin espacios tampoco estiran nada */
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.modal-caption strong {
+  color: var(--text);
+  font-size: 1rem;
+}
+
 /* ── varios ─────────────────────────────── */
 .empty {
   text-align: center;
@@ -916,5 +1063,19 @@ footer a {
 
   .gb-name {
     font-size: 1.25rem;
+  }
+
+  /* en celular la X y las flechas quedan sobre la carta para que no se corten */
+  .modal-close {
+    top: 8px;
+    right: 8px;
+  }
+
+  .modal-nav.prev {
+    left: 6px;
+  }
+
+  .modal-nav.next {
+    right: 6px;
   }
 }

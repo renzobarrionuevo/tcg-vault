@@ -4,7 +4,7 @@ import { getMeta } from '../api/tcgcsv.js'
 import { fmtDate } from '../lib/helpers.js'
 import { syncEnabled } from '../api/sync.js'
 
-export default function Settings({ items, onReplaceCollection, toast }) {
+export default function Settings({ items, deleted, onReplaceCollection, toast }) {
   const [apiKey, setApiKey] = useState(() => loadSettings().ptcgApiKey || '')
   const [meta, setMeta] = useState(null)
   const fileRef = useRef(null)
@@ -16,7 +16,7 @@ export default function Settings({ items, onReplaceCollection, toast }) {
 
   function saveKey() {
     saveSettings({ ...loadSettings(), ptcgApiKey: apiKey.trim() })
-    toast('Clave guardada. Se usará en las próximas búsquedas de Pokémon.')
+    toast('Clave guardada. Se usará en las próximas consultas a pokemontcg.io.')
   }
 
   async function handleImport(e) {
@@ -25,9 +25,21 @@ export default function Settings({ items, onReplaceCollection, toast }) {
     if (!file) return
     try {
       const imported = await parseBackupFile(file)
-      const next = importMode.current === 'replace' ? imported : mergeCollections(items, imported)
-      onReplaceCollection(next)
-      toast(`Importadas ${imported.length} cartas (${importMode.current === 'replace' ? 'reemplazo' : 'combinado'}).`)
+      if (importMode.current === 'replace') {
+        // el archivo manda: entra todo, incluso lo que se hubiera borrado
+        onReplaceCollection(imported, { restore: true })
+        toast(`Colección reemplazada por la del archivo (${imported.length} cartas).`)
+      } else {
+        const next = mergeCollections(items, imported, deleted)
+        const added = next.length - items.length
+        const skipped = imported.length - added
+        onReplaceCollection(next)
+        toast(
+          skipped
+            ? `Combinado: ${added} cartas nuevas (${skipped} ya estaban o las habías borrado).`
+            : `Combinado: ${added} cartas nuevas.`
+        )
+      }
     } catch (err) {
       toast(`No pude importar: ${err.message}`)
     }
@@ -38,7 +50,8 @@ export default function Settings({ items, onReplaceCollection, toast }) {
       <section>
         <h3>Datos de precios</h3>
         <p className="hint">
-          Los precios de TCGPlayer se regeneran una vez por día con GitHub Actions (tcgcsv.com).
+          Los precios de TCGPlayer se regeneran una vez por día con GitHub Actions (tcgcsv.com) y la app los aplica sola
+          al abrirse.
           {meta?.updatedAt ? (
             <>
               {' '}
@@ -53,7 +66,9 @@ export default function Settings({ items, onReplaceCollection, toast }) {
       <section>
         <h3>API key de pokemontcg.io (opcional)</h3>
         <p className="hint">
-          Sin clave: 1.000 consultas/día. Con clave gratuita (registro en{' '}
+          Las búsquedas por nombre y los precios ya no dependen de pokemontcg.io. La API solo se usa para buscar por su
+          código (<code>sv4-123</code>) y para actualizar cartas agregadas con versiones anteriores de la app. Sin clave:
+          1.000 consultas/día. Con clave gratuita (registro en{' '}
           <a href="https://dev.pokemontcg.io" target="_blank" rel="noreferrer">
             dev.pokemontcg.io
           </a>
@@ -77,7 +92,7 @@ export default function Settings({ items, onReplaceCollection, toast }) {
         {syncEnabled ? (
           <p className="hint">
             Firebase está configurado ✓ — usá el botón <strong>«Entrar con Google»</strong> (arriba) en cada
-            dispositivo y tu colección se mantiene sincronizada sola.
+            dispositivo y tu colección se mantiene sincronizada sola. Lo que borrás en un dispositivo se borra en todos.
           </p>
         ) : (
           <p className="hint">
@@ -91,8 +106,8 @@ export default function Settings({ items, onReplaceCollection, toast }) {
       <section>
         <h3>Respaldo</h3>
         <p className="hint">
-          Tu colección vive en el almacenamiento de este navegador. Exportá un respaldo cada tanto y para pasarla a
-          otro dispositivo.
+          Exportá un respaldo cada tanto. «Combinar» agrega lo que falte del archivo sin volver a traer lo que
+          borraste; «Reemplazar» deja la colección exactamente como está en el archivo.
         </p>
         <div className="row">
           <button className="btn" onClick={() => exportCollection(items)} disabled={!items.length}>

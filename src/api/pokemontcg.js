@@ -1,6 +1,12 @@
 /**
  * Cliente de pokemontcg.io (Pokémon TCG API v2).
- * Incluye precios de TCGPlayer actualizados a diario.
+ *
+ * Desde que el pipeline genera un índice Pokémon local, esta API queda solo
+ * como respaldo: búsqueda por id de pokemontcg.io ("sv4-123", que TCGPlayer
+ * no conoce), búsqueda por nombre si el índice local no existe, y refresco de
+ * precios de las cartas agregadas con versiones anteriores de la app
+ * (source 'ptcg').
+ *
  * API key opcional (gratis en dev.pokemontcg.io): sin key 1.000 req/día.
  */
 
@@ -46,7 +52,7 @@ export async function getCardById(id) {
   return normalize(data?.data)
 }
 
-/** Búsqueda por nombre. */
+/** Búsqueda por nombre (respaldo cuando no hay índice local). */
 export async function searchByName(q, limit = 16) {
   const clean = q.replace(/["\\]/g, '').trim()
   if (!clean) return []

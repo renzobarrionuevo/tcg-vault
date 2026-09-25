@@ -95,6 +95,28 @@ const PK_RARITIES = [
   ['UNCONFIRMED', '', '?', 'Rareza sin confirmar por TCGPlayer', 'gris'],
 ]
 
+/**
+ * pokemontcg.io (cartas agregadas con versiones viejas de la app) usa otro
+ * vocabulario que TCGPlayer: "Rare Holo" en vez de "Holo Rare", etc. Se
+ * traduce al de tcgcsv para que la misma rareza no salga en dos chips.
+ */
+const PK_RARITY_ALIASES = {
+  'RARE HOLO': 'HOLO RARE',
+  'RARE ULTRA': 'ULTRA RARE',
+  'RARE SECRET': 'SECRET RARE',
+  'RARE RAINBOW': 'RAINBOW RARE',
+  'RARE SHINY': 'SHINY RARE',
+  'RARE SHINY GX': 'SHINY ULTRA RARE',
+  'RARE PRISM STAR': 'PRISM RARE',
+  'RARE HOLO EX': 'ULTRA RARE',
+  'RARE HOLO GX': 'ULTRA RARE',
+  'RARE HOLO V': 'ULTRA RARE',
+  'RARE HOLO VMAX': 'ULTRA RARE',
+  'RARE HOLO VSTAR': 'ULTRA RARE',
+  'RARE HOLO LV.X': 'ULTRA RARE',
+  'TRAINER GALLERY RARE HOLO': 'HOLO RARE',
+}
+
 /** 'DON!!' → 'don', '—' → 'none'. Para la clase CSS del chip. */
 function slug(code) {
   return code === '—' ? 'none' : code.toLowerCase().replace(/[^a-z0-9]/g, '') || 'none'
@@ -141,6 +163,7 @@ export function rarityCounts(items, game) {
   for (const it of items) {
     let key = (it.rarity || '').trim().toUpperCase()
     if (!key || key === 'NONE') key = '—'
+    if (game === 'pk') key = PK_RARITY_ALIASES[key] || key
     counts.set(key, (counts.get(key) || 0) + (it.qty || 1))
   }
 
@@ -169,17 +192,34 @@ export function fmtDate(iso) {
   }
 }
 
+/**
+ * Versión grande de la imagen guardada (que es la miniatura de 200 px).
+ * TCGPlayer sirve la misma foto en 1000 px; pokemontcg.io tiene un _hires.
+ * Si no reconoce la URL, devuelve la misma.
+ */
+export function largeImage(img) {
+  if (!img) return null
+  return img
+    .replace(/(tcgplayer-cdn\.tcgplayer\.com\/product\/\d+)_200w\.jpg$/, '$1_in_1000x1000.jpg')
+    .replace(/(images\.pokemontcg\.io\/[^/]+\/[^/_]+)\.png$/, '$1_hires.png')
+}
+
 /** Precio de mercado unitario actual de un item de la colección. */
 export function marketOf(item) {
   return item.mkt ?? null
 }
 
-/** Totales de la colección: cartas, invertido, valor de mercado, ganancia. */
+/**
+ * Totales de la colección: cartas, invertido, valor de mercado, ganancia.
+ * La ganancia (pl) compara solo las cartas que tienen precio pagado Y precio
+ * de mercado: una carta sin precio pagado no es "toda ganancia".
+ */
 export function totals(items) {
   let cards = 0
   let invested = 0
   let value = 0
   let priced = 0
+  let pl = 0
   for (const it of items) {
     const qty = it.qty || 1
     cards += qty
@@ -188,9 +228,10 @@ export function totals(items) {
     if (m != null) {
       value += m * qty
       priced += qty
+      if (it.paid != null) pl += (m - it.paid) * qty
     }
   }
-  return { cards, invested, value, pl: value - invested, priced }
+  return { cards, invested, value, pl, priced }
 }
 
 /** Elige la mejor variante por defecto (la que tenga precio de mercado). */

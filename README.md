@@ -4,10 +4,10 @@ App web para registrar tu colección de cartas de **Pokémon TCG** y **One Piece
 
 ## Qué hace
 
-- **Registrar cartas** pegando la **URL de tcgplayer.com** (ej: `https://www.tcgplayer.com/product/543603/...`), el **código de la carta** (`OP01-001`, `ST13-003` para One Piece; `sv4-123` para Pokémon) o buscando por **nombre**.
-- **Precios de TCGPlayer** (market / low / high) por variante (Normal, Foil, Holofoil, Reverse Holo…), regenerados **una vez por día** automáticamente.
-- Por cada carta: cantidad, condición (NM/LP/MP/HP/DMG), variante, precio pagado y **ganancia/pérdida** contra el precio de mercado actual.
-- Totales de la colección: cartas, invertido, valor de mercado y G/P.
+- **Registrar cartas** pegando la **URL de tcgplayer.com** (ej: `https://www.tcgplayer.com/product/543603/...`), el **código de la carta** (`OP01-001`, `ST13-003` para One Piece; `sv4-123` para Pokémon) o buscando por **nombre** (`charizard 125`, `zoro`). La búsqueda por nombre es local, sobre un índice de los dos juegos que se genera con los precios: no depende de ninguna API externa.
+- **Precios de TCGPlayer** (market / low / high) por variante (Normal, Foil, Holofoil, Reverse Holo…), regenerados **una vez por día** automáticamente y **aplicados solos al abrir la app** si el catálogo es más nuevo que tu último refresco.
+- Por cada carta: cantidad, condición (NM/LP/MP/HP/DMG), variante, precio pagado y **ganancia/pérdida** contra el precio de mercado actual. Si agregás una carta que ya tenés (misma variante y condición), te ofrece sumar la cantidad en vez de duplicar la fila.
+- Totales de la colección: cartas, invertido, valor de mercado y G/P. La tabla arranca ordenada por **mayor valor**.
 - **Respaldo**: exportar/importar tu colección como JSON.
 
 ## Cómo funciona (arquitectura)
@@ -17,12 +17,16 @@ GitHub Actions (diario, 07:00 UTC)
   └─ scripts/fetch-data.mjs
        └─ descarga catálogo + precios oficiales de TCGPlayer desde tcgcsv.com
           (Pokémon = categoría 3, One Piece = categoría 68)
-       └─ genera JSON estáticos en public/data/ (shards por productId + índice One Piece)
+       └─ genera JSON estáticos en public/data/:
+            products/{shard}.json   fichas completas con precios, por rango de productId
+            pk-index.json           índice de búsqueda por nombre/número (Pokémon)
+            op-index.json           índice de búsqueda por nombre/código (One Piece)
+       └─ si tcgcsv falla a mitad de camino, aborta: no se publica un catálogo incompleto
   └─ vite build  →  deploy a GitHub Pages
 
-La app (React) lee esos JSON desde su propio origen (sin CORS) y además
-consulta pokemontcg.io para búsquedas de Pokémon por nombre/código.
-Tu colección se guarda en el localStorage de tu navegador.
+La app (React) lee esos JSON desde su propio origen (sin CORS). pokemontcg.io
+queda solo como respaldo: códigos `sv4-123` y cartas agregadas con versiones
+anteriores de la app. Tu colección se guarda en el localStorage de tu navegador.
 ```
 
 ## Publicarla en GitHub Pages (paso a paso)
@@ -52,16 +56,21 @@ Tu colección se guarda en el localStorage de tu navegador.
 npm install
 npm run fetch-data   # descarga los datos de precios (tarda unos minutos)
 npm run dev          # abre la app en http://localhost:5173
-npm test             # tests de parsing y almacenamiento
+npm test             # tests de parsing, totales y almacenamiento
 ```
 
-Para probar el pipeline con un solo set: `node scripts/fetch-data.mjs --only-group 68:23349`
+Sin red, `node scripts/make-fixtures.mjs` deja un mini catálogo de ejemplo en `public/data/`.
+Para probar el pipeline con un solo set: `node scripts/fetch-data.mjs --only-group 68:23349`;
+contra un servidor falso: `node tests/fetch-data.e2e.mjs`.
+
+Smoke test de punta a punta (Playwright, con los fixtures): `npm run build && npm run preview` en una
+terminal y `node scripts/smoke-test.mjs` en otra (`CHROMIUM_PATH=…` si Playwright no encuentra el navegador).
 
 ## Importante: dónde viven tus datos
 
 Sin iniciar sesión, tu colección se guarda **en el navegador que uses** (localStorage). Si limpiás los datos del navegador o cambiás de dispositivo, usá **Ajustes → Exportar JSON** para respaldar y **Importar** para restaurar.
 
-Con la sincronización activada (ver siguiente sección), al **entrar con Google** la colección se guarda además en la nube (Firestore) y se mantiene igual en todos tus dispositivos, en tiempo real.
+Con la sincronización activada (ver siguiente sección), al **entrar con Google** la colección se guarda además en la nube (Firestore) y se mantiene igual en todos tus dispositivos, en tiempo real. Lo que borrás queda registrado durante 180 días ("lápidas"), así un dispositivo que estuvo cerrado no vuelve a subir cartas que ya no existen.
 
 ## Sincronización entre dispositivos (login con Google) — opcional y gratis
 
@@ -95,11 +104,11 @@ Los valores del `firebaseConfig` no son secretos: identifican al proyecto públi
 
 ## API key opcional (Pokémon)
 
-Sin key, pokemontcg.io permite 1.000 consultas/día (de sobra para uso personal). Si querés más, registrate gratis en [dev.pokemontcg.io](https://dev.pokemontcg.io) y pegá la key en **Ajustes** — se guarda solo en tu navegador.
+La búsqueda por nombre y los precios de Pokémon ya no pasan por pokemontcg.io; la API solo se usa para buscar por su código (`sv4-123`) y para refrescar cartas agregadas con versiones anteriores de la app. Sin key permite 1.000 consultas/día. Si querés más, registrate gratis en [dev.pokemontcg.io](https://dev.pokemontcg.io) y pegá la key en **Ajustes** — se guarda solo en tu navegador.
 
 ## Fuentes de datos
 
 - [tcgcsv.com](https://tcgcsv.com) — dumps diarios del catálogo y precios de TCGPlayer.
-- [pokemontcg.io](https://pokemontcg.io) — datos y precios TCGPlayer de cartas Pokémon.
+- [pokemontcg.io](https://pokemontcg.io) — respaldo para códigos `sv4-123` y cartas agregadas con versiones anteriores.
 
 Este proyecto no está afiliado a TCGPlayer, Pokémon ni Bandai.

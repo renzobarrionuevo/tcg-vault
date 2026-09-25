@@ -1,11 +1,14 @@
 /**
  * Orquestador de búsqueda: interpreta la entrada (URL / código / nombre)
  * y consulta la fuente que corresponda.
+ *
+ * Los resultados pueden venir "livianos" (sin `variants`, o sea sin precios)
+ * cuando salen de los índices locales; AddCard los completa al elegir uno.
  */
 
 import { parseInput } from './parse.js'
-import { getByProductId, getOpByCode, searchOpByName } from '../api/tcgcsv.js'
-import { getCardById, searchByName } from '../api/pokemontcg.js'
+import { getByProductId, getOpByCode, searchByName, hasIndex } from '../api/tcgcsv.js'
+import { getCardById, searchByName as searchPtcgByName } from '../api/pokemontcg.js'
 
 /**
  * @param {string} raw  lo que pegó el usuario
@@ -55,12 +58,20 @@ export async function search(raw, game = 'all') {
 
 async function nameSearch(q, game) {
   const jobs = []
-  if (game !== 'op') jobs.push(searchByName(q).catch(() => []))
-  if (game !== 'pk') jobs.push(searchOpByName(q).catch(() => []))
+  if (game !== 'op') jobs.push(pkNameSearch(q))
+  if (game !== 'pk') jobs.push(searchByName('op', q).catch(() => []))
   const settled = await Promise.all(jobs)
   const results = settled.flat()
   return {
     results,
     note: results.length ? undefined : 'Sin resultados. Probá con el nombre en inglés, el código de la carta o la URL de TCGPlayer.',
   }
+}
+
+/** Pokémon: índice local primero; pokemontcg.io solo si el índice no existe. */
+async function pkNameSearch(q) {
+  const local = await searchByName('pk', q).catch(() => [])
+  if (local.length) return local
+  if (await hasIndex('pk').catch(() => false)) return []
+  return searchPtcgByName(q).catch(() => [])
 }

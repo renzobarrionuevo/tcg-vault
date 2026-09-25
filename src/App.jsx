@@ -5,6 +5,20 @@ import Settings from './components/Settings.jsx'
 import GamePicker from './components/GamePicker.jsx'
 import Icon from './components/Icon.jsx'
 import logo from './assets/logo-tcg-vault.png'
+import {
+  loadCollection,
+  saveCollection,
+  loadDeleted,
+  saveDeleted,
+  mergeCollections,
+  mergeDeleted,
+  pruneDeleted,
+  tombstones,
+} from './lib/storage.js'
+import { totals, fmtMoney, fmtDate, GAME_LABEL, variantLabel } from './lib/helpers.js'
+import { getMeta, refreshCsvPrices } from './api/tcgcsv.js'
+import { refreshPtcgPrices } from './api/pokemontcg.js'
+import { syncEnabled, onAuthChange, signInWithGoogle, signOut, initialMerge, pushVault, onRemoteChange } from './api/sync.js'
 
 /** Pestañas de la colección. `title` es lo que se lee cuando el texto se oculta. */
 const TABS = [
@@ -12,14 +26,41 @@ const TABS = [
   { id: 'add', icon: 'plus', label: '+ Agregar', title: 'Agregar carta' },
   { id: 'set', icon: 'sliders', label: 'Ajustes', title: 'Ajustes' },
 ]
-import { loadCollection, saveCollection, mergeCollections } from './lib/storage.js'
-import { totals, fmtMoney, GAME_LABEL } from './lib/helpers.js'
-import { refreshCsvPrices } from './api/tcgcsv.js'
-import { refreshPtcgPrices } from './api/pokemontcg.js'
-import { syncEnabled, onAuthChange, signInWithGoogle, signOut, initialMerge, pushItems, onRemoteChange } from './api/sync.js'
+
+/** Espera tras el último cambio antes de subir a la nube (cada tecla en
+ *  "cantidad" o "pagado" es un cambio; no vale la pena subir cada una). */
+const PUSH_DEBOUNCE_MS = 1000
+
+/** Lo que se guarda y sincroniza: la colección más las lápidas de lo borrado. */
+const snapshot = (items, deleted) => JSON.stringify({ items, deleted })
+
+/**
+ * Aplica precios nuevos a una lista de cartas. `only` limita a un juego.
+ * Devuelve la lista nueva y cuántas cartas cambiaron.
+ */
+function applyPrices(items, { csvMap, ptcgMap, now, only }) {
+  let updated = 0
+  const next = items.map((it) => {
+    if (only && it.game !== only) return it
+    const map = it.source === 'csv' ? csvMap : ptcgMap
+    const price = map?.get(it.sourceId)?.[it.variant]?.market
+    if (price == null) return it
+    updated++
+    return { ...it, mkt: price, mktAt: now }
+  })
+  return { next, updated }
+}
+
+/** Precio pagado promedio al sumar `b` (nuevo) a `a` (existente, con qty `qa`). */
+function avgPaid(a, b, qa) {
+  if (a.paid == null) return b.paid
+  if (b.paid == null) return a.paid
+  return Math.round(((a.paid * qa + b.paid * b.qty) / (qa + b.qty)) * 100) / 100
+}
 
 export default function App() {
   const [items, setItems] = useState(loadCollection)
+  const [deleted, setDeleted] = useState(() => pruneDeleted(loadDeleted()))
   const [game, setGame] = useState(null) // null = pantalla de elección de juego
   const [tab, setTab] = useState('col')
   const [msg, setMsg] = useState('')
@@ -28,10 +69,11 @@ export default function App() {
   // estado de la nube: 'off' | 'syncing' | 'saved' | 'pending' | 'error'
   const [cloud, setCloud] = useState({ state: 'off', at: null })
   const synced = useRef(false) // true recién cuando terminó la combinación inicial
-  const lastPushed = useRef(null) // JSON de lo último confirmado en la nube
+  const lastPushed = useRef(null) // snapshot de lo último confirmado en la nube
   const pushTimer = useRef(null)
-  const itemsRef = useRef(items)
-  itemsRef.current = items
+  const toastTimer = useRef(null)
+  const vault = useRef({ items, deleted }) // lo actual, para leer desde callbacks
+  vault.current = { items, deleted }
 
   // sesión de Google (si Firebase está configurado)
   useEffect(() => {
@@ -53,22 +95,25 @@ export default function App() {
     setCloud({ state: 'syncing', at: null })
     ;(async () => {
       try {
-        const merged = await initialMerge(user.uid, loadCollection())
+        const merged = await initialMerge(user.uid, vault.current)
         if (cancelled) return
-        lastPushed.current = JSON.stringify(merged)
+        lastPushed.current = snapshot(merged.items, merged.deleted)
         synced.current = true
-        setItems(merged)
+        setItems(merged.items)
+        setDeleted(merged.deleted)
         setCloud({ state: 'saved', at: new Date() })
-        toast(`Sincronizado con tu cuenta (${merged.length} cartas).`)
-        unsub = onRemoteChange(user.uid, (remoteItems) => {
-          const localJson = JSON.stringify(itemsRef.current)
-          if (localJson !== lastPushed.current) {
+        toast(`Sincronizado con tu cuenta (${merged.items.length} cartas).`)
+        unsub = onRemoteChange(user.uid, (remote) => {
+          const local = vault.current
+          if (snapshot(local.items, local.deleted) !== lastPushed.current) {
             // hay cambios locales sin subir → combinar en vez de pisar
-            const combined = mergeCollections(remoteItems, itemsRef.current)
-            setItems(combined) // queda distinto de lastPushed → se re-sube solo
+            const d = mergeDeleted(remote.deleted, local.deleted)
+            setDeleted(d)
+            setItems(mergeCollections(remote.items, local.items, d)) // queda distinto de lastPushed → se re-sube solo
           } else {
-            lastPushed.current = JSON.stringify(remoteItems)
-            setItems(remoteItems)
+            lastPushed.current = snapshot(remote.items, remote.deleted)
+            setItems(remote.items)
+            setDeleted(remote.deleted)
             setCloud({ state: 'saved', at: new Date() })
           }
         })
@@ -88,23 +133,24 @@ export default function App() {
   // de la sincronización inicial (así un dispositivo "vacío" jamás pisa la nube)
   useEffect(() => {
     saveCollection(items)
+    saveDeleted(deleted)
     if (!user || !synced.current) return
-    const json = JSON.stringify(items)
+    const json = snapshot(items, deleted)
     if (json === lastPushed.current) return // vino de la nube o ya está subido
     setCloud({ state: 'pending', at: null })
     window.clearTimeout(pushTimer.current)
     pushTimer.current = window.setTimeout(async () => {
       try {
-        await pushItems(user.uid, items)
+        await pushVault(user.uid, { items, deleted })
         lastPushed.current = json
         setCloud({ state: 'saved', at: new Date() })
       } catch (err) {
         setCloud({ state: 'error', at: null })
         toast(`No pude guardar en la nube: ${err.message}`)
       }
-    }, 400)
+    }, PUSH_DEBOUNCE_MS)
     return () => window.clearTimeout(pushTimer.current)
-  }, [items, user])
+  }, [items, deleted, user])
 
   // red de seguridad: si cerrás/minimizás la pestaña con un guardado pendiente,
   // se intenta subir inmediatamente
@@ -112,10 +158,12 @@ export default function App() {
     if (!user) return
     function flush() {
       if (!synced.current) return
-      if (JSON.stringify(itemsRef.current) !== lastPushed.current) {
-        pushItems(user.uid, itemsRef.current)
+      const { items, deleted } = vault.current
+      const json = snapshot(items, deleted)
+      if (json !== lastPushed.current) {
+        pushVault(user.uid, { items, deleted })
           .then(() => {
-            lastPushed.current = JSON.stringify(itemsRef.current)
+            lastPushed.current = json
           })
           .catch(() => {})
       }
@@ -131,13 +179,59 @@ export default function App() {
     }
   }, [user])
 
+  // precios al día al abrir: si el catálogo diario es más nuevo que el último
+  // refresco de alguna carta, se actualiza sola (mismo origen, sin límites)
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const meta = await getMeta()
+      if (cancelled || !meta?.updatedAt) return
+      const stale = vault.current.items.filter(
+        (it) => it.source === 'csv' && (!it.mktAt || it.mktAt < meta.updatedAt)
+      )
+      if (!stale.length) return
+      const csvMap = await refreshCsvPrices(stale.map((it) => it.sourceId))
+      if (cancelled) return
+      const now = new Date().toISOString()
+      const { updated } = applyPrices(stale, { csvMap, now })
+      if (!updated) return
+      setItems((prev) => applyPrices(prev, { csvMap, now }).next)
+      toast(`Precios al día: ${updated} cartas actualizadas al catálogo del ${fmtDate(meta.updatedAt)}.`)
+    })().catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   function toast(text) {
     setMsg(text)
-    window.clearTimeout(toast._t)
-    toast._t = window.setTimeout(() => setMsg(''), 4000)
+    window.clearTimeout(toastTimer.current)
+    toastTimer.current = window.setTimeout(() => setMsg(''), 4000)
   }
 
   function addItem(item) {
+    // misma carta, variante y condición → ofrecer sumar en vez de duplicar la fila
+    const dup = vault.current.items.find(
+      (it) =>
+        it.source === item.source && it.sourceId === item.sourceId && it.variant === item.variant && it.cond === item.cond
+    )
+    if (dup) {
+      const have = dup.qty || 1
+      const sum = confirm(
+        `Ya tenés ${have} de «${item.name}» (${variantLabel(item.variant) || 'sin variante'}, ${item.cond}). ¿Sumar ${item.qty} a esa fila en vez de agregar otra?`
+      )
+      if (sum) {
+        updateItem(dup.uid, {
+          qty: have + item.qty,
+          paid: avgPaid(dup, item, have),
+          mkt: item.mkt ?? dup.mkt,
+          mktAt: item.mkt != null ? item.mktAt : dup.mktAt,
+        })
+        setTab('col')
+        toast(`«${item.name}»: ahora tenés ${have + item.qty}.`)
+        return
+      }
+    }
     setItems((prev) => [item, ...prev])
     setTab('col')
     toast(`«${item.name}» agregada a la colección.`)
@@ -149,6 +243,24 @@ export default function App() {
 
   function removeItem(uid) {
     setItems((prev) => prev.filter((it) => it.uid !== uid))
+    setDeleted((prev) => ({ ...prev, ...tombstones([uid]) }))
+  }
+
+  /**
+   * Reemplaza la colección entera (importar / borrar todo). Lo que desaparece
+   * queda con lápida para que no vuelva desde otro dispositivo. Con `restore`
+   * (importar reemplazando) el archivo manda: se levantan las lápidas de lo
+   * que trae.
+   */
+  function replaceCollection(next, { restore = false } = {}) {
+    const keep = new Set(next.map((it) => it.uid))
+    const gone = vault.current.items.filter((it) => !keep.has(it.uid)).map((it) => it.uid)
+    setDeleted((prev) => {
+      const d = { ...prev, ...tombstones(gone) }
+      if (restore) for (const it of next) delete d[it.uid]
+      return d
+    })
+    setItems(next)
   }
 
   // todo lo visible (tabla, totales, refresco de precios) es del juego elegido
@@ -176,19 +288,9 @@ export default function App() {
         : new Map()
 
       const now = new Date().toISOString()
-      let updated = 0
-      const next = items.map((it) => {
-        if (game && it.game !== game) return it // el otro juego no se toca
-        const map = it.source === 'csv' ? csvMap : ptcgMap
-        const variants = map.get(it.sourceId)
-        const price = variants?.[it.variant]?.market
-        if (price != null) {
-          updated++
-          return { ...it, mkt: price, mktAt: now }
-        }
-        return it
-      })
-      setItems(next)
+      const { updated } = applyPrices(scoped, { csvMap, ptcgMap, now })
+      // forma funcional: no pisa lo que cambió mientras bajaban los precios
+      setItems((prev) => applyPrices(prev, { csvMap, ptcgMap, now, only: game }).next)
       toast(`Precios actualizados (${updated} de ${scoped.length} cartas).`)
     } catch (err) {
       toast(`Error actualizando precios: ${err.message}`)
@@ -214,6 +316,12 @@ export default function App() {
         <div className="stats">
           <Stat label="Cartas" value={t.cards.toLocaleString()} />
           <Stat label="Valor de mercado" value={fmtMoney(t.value)} />
+          <Stat label="Invertido" value={t.invested ? fmtMoney(t.invested) : '—'} />
+          <Stat
+            label="G/P"
+            value={t.invested ? `${t.pl >= 0 ? '+' : ''}${fmtMoney(t.pl)}` : '—'}
+            className={t.invested ? (t.pl >= 0 ? 'gain' : 'loss') : ''}
+          />
         </div>
         {syncEnabled && (
           <div className="auth">
@@ -282,7 +390,9 @@ export default function App() {
         {!game && <GamePicker items={items} onPick={pickGame} />}
         {game && tab === 'col' && <CollectionTable items={scoped} game={game} onUpdate={updateItem} onRemove={removeItem} />}
         {game && tab === 'add' && <AddCard game={game} onAdd={addItem} />}
-        {game && tab === 'set' && <Settings items={items} onReplaceCollection={setItems} toast={toast} />}
+        {game && tab === 'set' && (
+          <Settings items={items} deleted={deleted} onReplaceCollection={replaceCollection} toast={toast} />
+        )}
       </main>
 
       <footer>
@@ -302,11 +412,11 @@ export default function App() {
   )
 }
 
-function Stat({ label, value }) {
+function Stat({ label, value, className = '' }) {
   return (
     <div className="stat">
       <span>{label}</span>
-      <strong>{value}</strong>
+      <strong className={className}>{value}</strong>
     </div>
   )
 }

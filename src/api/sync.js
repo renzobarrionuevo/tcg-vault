@@ -2,9 +2,11 @@
  * Sincronización opcional con Firebase (login con Google + Firestore).
  *
  * Diseño:
- *  - Documento único por usuario: vaults/{uid} → { items, updatedAt, updatedBy }
+ *  - Documento único por usuario: vaults/{uid} → { items, deleted, updatedAt, updatedBy }
+ *    `deleted` son las lápidas (uid → fecha) de las cartas borradas; ver storage.js.
  *  - Al iniciar sesión se COMBINA lo local con lo remoto (unión por uid de
- *    carta, sin duplicar) y se sube el resultado.
+ *    carta, sin duplicar, respetando las lápidas de ambos lados) y se sube
+ *    el resultado.
  *  - Cada cambio local se sube con debounce. Cambios remotos (otro
  *    dispositivo) llegan en vivo vía onSnapshot y se aplican si no son
  *    nuestros (updatedBy distinto).
@@ -12,7 +14,7 @@
  */
 
 import { firebaseConfig } from '../firebase-config.js'
-import { mergeCollections } from '../lib/storage.js'
+import { mergeCollections, mergeDeleted, pruneDeleted } from '../lib/storage.js'
 
 export const syncEnabled = !!firebaseConfig
 
@@ -87,23 +89,34 @@ function vaultRef(uid) {
   return fsMod.doc(db, 'vaults', uid)
 }
 
-/** Baja lo remoto, lo combina con lo local y sube el resultado. Devuelve la lista combinada. */
-export async function initialMerge(uid, localItems) {
+/** documento crudo de Firestore → { items, deleted } */
+function fromDoc(data) {
+  return { items: data?.items || [], deleted: data?.deleted || {} }
+}
+
+/**
+ * Baja lo remoto, lo combina con lo local ({ items, deleted }) y sube el
+ * resultado. Devuelve el combinado.
+ */
+export async function initialMerge(uid, local) {
   await init()
   const { fsMod } = fb
   const snap = await fsMod.getDoc(vaultRef(uid))
-  const remoteItems = snap.exists() ? snap.data().items || [] : []
-  const merged = mergeCollections(remoteItems, localItems)
-  await pushItems(uid, merged)
+  const remote = fromDoc(snap.exists() ? snap.data() : null)
+  const deleted = pruneDeleted(mergeDeleted(remote.deleted, local.deleted))
+  const items = mergeCollections(remote.items, local.items, deleted)
+  const merged = { items, deleted }
+  await pushVault(uid, merged)
   return merged
 }
 
 /** Sube la colección completa (documento único, last-write-wins). */
-export async function pushItems(uid, items) {
+export async function pushVault(uid, { items, deleted }) {
   await init()
   const { fsMod } = fb
   await fsMod.setDoc(vaultRef(uid), {
     items,
+    deleted: deleted || {},
     updatedAt: new Date().toISOString(),
     updatedBy: CLIENT_ID,
   })
@@ -118,6 +131,6 @@ export function onRemoteChange(uid, callback) {
     const data = snap.data()
     // ignorar ecos de este mismo cliente y escrituras locales pendientes
     if (data.updatedBy === CLIENT_ID || snap.metadata.hasPendingWrites) return
-    callback(data.items || [])
+    callback(fromDoc(data))
   })
 }

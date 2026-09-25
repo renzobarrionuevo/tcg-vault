@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { search } from '../lib/search.js'
+import { getByProductId } from '../api/tcgcsv.js'
+import CardModal from './CardModal.jsx'
 import { GAME_LABEL, variantLabel, defaultVariant, fmtMoney, CONDITIONS } from '../lib/helpers.js'
 import { newUid } from '../lib/storage.js'
 
@@ -9,15 +11,41 @@ export default function AddCard({ onAdd, game }) {
   const [busy, setBusy] = useState(false)
   const [results, setResults] = useState(null)
   const [note, setNote] = useState('')
-  const [selected, setSelected] = useState(null)
+  const [selected, setSelected] = useState(null) // resultado elegido (puede venir sin precios)
+  const [card, setCard] = useState(null) // el elegido, con precios
+  const [loadingCard, setLoadingCard] = useState(false)
+  const [preview, setPreview] = useState(null) // posición (en `previewList`) de la carta abierta en grande
+  const pickSeq = useRef(0) // descarta respuestas de elecciones viejas
 
   const other = game === 'pk' ? 'op' : 'pk'
+  // con varios resultados, el modal los recorre; con uno solo, muestra el elegido
+  const previewList = results && results.length > 1 ? results : card ? [card] : []
+
+  /** Los resultados del índice local no traen precios: se completan al elegir. */
+  async function pick(r) {
+    const seq = ++pickSeq.current
+    setSelected(r)
+    if (r.variants) {
+      setCard(r)
+      return
+    }
+    setCard(null)
+    setLoadingCard(true)
+    try {
+      const full = await getByProductId(r.sourceId)
+      if (seq !== pickSeq.current) return
+      setCard(full || { ...r, variants: {} })
+    } finally {
+      if (seq === pickSeq.current) setLoadingCard(false)
+    }
+  }
 
   async function runSearch(e) {
     e?.preventDefault()
     if (!query.trim() || busy) return
     setBusy(true)
     setSelected(null)
+    setCard(null)
     setNote('')
     try {
       const res = await search(query, game)
@@ -30,7 +58,7 @@ export default function AddCard({ onAdd, game }) {
           ? `Esa carta es de ${GAME_LABEL[other]}. Volvé a «Juegos» y entrá a la colección de ${GAME_LABEL[other]} para agregarla.`
           : res.note || ''
       )
-      if (mine.length === 1) setSelected(mine[0])
+      if (mine.length === 1) await pick(mine[0])
     } catch (err) {
       setResults([])
       setNote(`Error buscando: ${err.message}`)
@@ -55,7 +83,7 @@ export default function AddCard({ onAdd, game }) {
       </form>
       <p className="hint">
         Agregando a <b>{GAME_LABEL[game]}</b>. Ejemplos: <code>https://www.tcgplayer.com/product/543603/…</code> ·{' '}
-        <code>{game === 'op' ? 'OP01-121' : 'sv4-182'}</code> · <code>{game === 'op' ? 'zoro' : 'charizard'}</code>
+        <code>{game === 'op' ? 'OP01-121' : 'charizard 125'}</code> · <code>{game === 'op' ? 'zoro' : 'pikachu'}</code>
       </p>
 
       {note && <p className="note">{note}</p>}
@@ -66,10 +94,10 @@ export default function AddCard({ onAdd, game }) {
             <button
               key={`${r.source}-${r.sourceId}`}
               className={`result-card ${selected?.sourceId === r.sourceId && selected?.source === r.source ? 'sel' : ''}`}
-              onClick={() => setSelected(r)}
+              onClick={() => pick(r)}
               type="button"
             >
-              {r.img ? <img src={r.img} alt={r.name} loading="lazy" /> : <div className="noimg">Sin imagen</div>}
+              <Thumb src={r.img} alt={r.name} />
               <div className="rc-name">{r.name}</div>
               <div className="rc-meta">
                 {GAME_LABEL[r.game]} · {r.set}
@@ -80,12 +108,31 @@ export default function AddCard({ onAdd, game }) {
         </div>
       )}
 
-      {selected && <AddForm key={`${selected.source}-${selected.sourceId}`} card={selected} onAdd={onAdd} />}
+      {loadingCard && <p className="hint">Cargando precios…</p>}
+      {card && (
+        <AddForm
+          key={`${card.source}-${card.sourceId}`}
+          card={card}
+          onAdd={onAdd}
+          onPreview={() => setPreview(Math.max(0, previewList.findIndex((r) => r.sourceId === card.sourceId)))}
+        />
+      )}
+
+      {preview != null && (
+        <CardModal cards={previewList} index={preview} onIndexChange={setPreview} onClose={() => setPreview(null)} />
+      )}
     </div>
   )
 }
 
-function AddForm({ card, onAdd }) {
+/** Imagen de carta con relleno si no hay o si el CDN no la tiene. */
+function Thumb({ src, alt, big = false }) {
+  const [broken, setBroken] = useState(false)
+  if (!src || broken) return <div className={`noimg ${big ? 'big' : ''}`}>Sin imagen</div>
+  return <img src={src} alt={alt} loading="lazy" onError={() => setBroken(true)} />
+}
+
+function AddForm({ card, onAdd, onPreview }) {
   const variants = Object.keys(card.variants || {})
   const [variant, setVariant] = useState(defaultVariant(card.variants))
   const [qty, setQty] = useState(1)
@@ -109,7 +156,7 @@ function AddForm({ card, onAdd }) {
       variant,
       qty: Math.max(1, Number(qty) || 1),
       cond,
-      paid: paid === '' ? null : Math.max(0, Number(paid)),
+      paid: paid === '' || Number.isNaN(Number(paid)) ? null : Math.max(0, Number(paid)),
       mkt: market ?? null,
       mktAt: market != null ? new Date().toISOString() : null,
       addedAt: new Date().toISOString(),
@@ -119,7 +166,9 @@ function AddForm({ card, onAdd }) {
   return (
     <form className="add-form" onSubmit={submit}>
       <div className="af-card">
-        {card.img ? <img src={card.img} alt={card.name} /> : <div className="noimg big">Sin imagen</div>}
+        <button type="button" className="thumb-btn" onClick={() => onPreview(card)} title="Ver en grande">
+          <Thumb src={card.img} alt={card.name} big />
+        </button>
         <div>
           <h3>{card.name}</h3>
           <p className="rc-meta">

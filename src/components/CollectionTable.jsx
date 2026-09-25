@@ -1,15 +1,21 @@
 import { useMemo, useState } from 'react'
 import RarityBar from './RarityBar.jsx'
+import CardModal from './CardModal.jsx'
 import { GAME_LABEL, variantLabel, fmtMoney, fmtDate, CONDITIONS, marketOf } from '../lib/helpers.js'
 
+/** Órdenes disponibles; el primero es el que se usa al entrar. */
 const SORTS = {
+  value: { label: 'Mayor valor', fn: (a, b) => valueOf(b) - valueOf(a) },
+  pl: { label: 'Mayor ganancia', fn: (a, b) => plOf(b) - plOf(a) },
   added: { label: 'Más recientes', fn: (a, b) => (b.addedAt || '').localeCompare(a.addedAt || '') },
-  name: { label: 'Nombre', fn: (a, b) => a.name.localeCompare(b.name) },
-  value: { label: 'Mayor valor', fn: (a, b) => (marketOf(b) ?? -1) * (b.qty || 1) - (marketOf(a) ?? -1) * (a.qty || 1) },
-  pl: {
-    label: 'Mayor ganancia',
-    fn: (a, b) => plOf(b) - plOf(a),
-  },
+  name: { label: 'Nombre', fn: (a, b) => (a.name || '').localeCompare(b.name || '') },
+}
+const DEFAULT_SORT = Object.keys(SORTS)[0]
+
+/** Valor total de la fila (precio × cantidad); sin precio va al final. */
+function valueOf(it) {
+  const m = marketOf(it)
+  return m == null ? -Infinity : m * (it.qty || 1)
 }
 
 function plOf(it) {
@@ -21,7 +27,8 @@ function plOf(it) {
 /** Recibe los items ya acotados a un juego (App decide cuál). */
 export default function CollectionTable({ items, game, onUpdate, onRemove }) {
   const [text, setText] = useState('')
-  const [sort, setSort] = useState('added')
+  const [sort, setSort] = useState(DEFAULT_SORT)
+  const [preview, setPreview] = useState(null) // posición (en `filtered`) de la carta abierta en grande
 
   const filtered = useMemo(() => {
     const needle = text.trim().toLowerCase()
@@ -80,7 +87,7 @@ export default function CollectionTable({ items, game, onUpdate, onRemove }) {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((it) => {
+            {filtered.map((it, i) => {
               const m = marketOf(it)
               const qty = it.qty || 1
               const value = m != null ? m * qty : null
@@ -89,7 +96,9 @@ export default function CollectionTable({ items, game, onUpdate, onRemove }) {
                 <tr key={it.uid}>
                   <td>
                     <div className="cell-card">
-                      {it.img ? <img src={it.img} alt="" loading="lazy" /> : <div className="noimg mini" />}
+                      <button type="button" className="thumb-btn" onClick={() => setPreview(i)} title="Ver en grande">
+                        {it.img ? <img src={it.img} alt="" loading="lazy" /> : <div className="noimg mini" />}
+                      </button>
                       <div>
                         <div className="cc-name">
                           {it.url ? (
@@ -158,6 +167,10 @@ export default function CollectionTable({ items, game, onUpdate, onRemove }) {
           </tbody>
         </table>
       </div>
+
+      {preview != null && (
+        <CardModal cards={filtered} index={preview} onIndexChange={setPreview} onClose={() => setPreview(null)} />
+      )}
     </div>
   )
 }

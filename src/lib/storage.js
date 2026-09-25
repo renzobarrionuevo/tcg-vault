@@ -1,32 +1,49 @@
 /**
- * Persistencia de la colección en localStorage + export/import JSON.
- * (En un sitio real como GitHub Pages, localStorage persiste entre visitas
- * en el mismo navegador. El export JSON sirve de respaldo y para migrar.)
+ * Persistencia en localStorage + export/import JSON.
+ *
+ * Se guardan dos cosas:
+ *  - la colección (lista de cartas, cada una con un `uid` único), y
+ *  - las "lápidas": uid → fecha de las cartas borradas. Sin ellas, combinar
+ *    la colección con la de otro dispositivo (o con un respaldo viejo)
+ *    resucitaría lo que se borró. Se olvidan a los TOMBSTONE_DAYS días.
  */
 
 const COLLECTION_KEY = 'tcgvault.collection.v1'
+const DELETED_KEY = 'tcgvault.deleted.v1'
 const SETTINGS_KEY = 'tcgvault.settings.v1'
 
-export function loadCollection() {
+/** Cuánto se recuerda un borrado. Tiene que superar el tiempo máximo que un
+ *  dispositivo puede pasar sin abrir la app sin que reviva cartas viejas. */
+export const TOMBSTONE_DAYS = 180
+
+function readJson(key, fallback) {
   try {
-    const raw = localStorage.getItem(COLLECTION_KEY)
-    const data = raw ? JSON.parse(raw) : []
-    return Array.isArray(data) ? data : []
+    return JSON.parse(localStorage.getItem(key)) ?? fallback
   } catch {
-    return []
+    return fallback
   }
+}
+
+export function loadCollection() {
+  const data = readJson(COLLECTION_KEY, [])
+  return Array.isArray(data) ? data : []
 }
 
 export function saveCollection(items) {
   localStorage.setItem(COLLECTION_KEY, JSON.stringify(items))
 }
 
+export function loadDeleted() {
+  const data = readJson(DELETED_KEY, {})
+  return data && typeof data === 'object' && !Array.isArray(data) ? data : {}
+}
+
+export function saveDeleted(deleted) {
+  localStorage.setItem(DELETED_KEY, JSON.stringify(deleted))
+}
+
 export function loadSettings() {
-  try {
-    return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {}
-  } catch {
-    return {}
-  }
+  return readJson(SETTINGS_KEY, {}) || {}
 }
 
 export function saveSettings(settings) {
@@ -35,6 +52,26 @@ export function saveSettings(settings) {
 
 export function newUid() {
   return `c_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+/** Lápidas nuevas para estos uids, todas con la misma fecha. */
+export function tombstones(uids, at = new Date().toISOString()) {
+  return Object.fromEntries(uids.filter(Boolean).map((uid) => [uid, at]))
+}
+
+/** Unión de dos juegos de lápidas; ante el mismo uid gana la fecha más nueva. */
+export function mergeDeleted(a = {}, b = {}) {
+  const out = { ...a }
+  for (const [uid, at] of Object.entries(b)) {
+    if (!out[uid] || out[uid] < at) out[uid] = at
+  }
+  return out
+}
+
+/** Descarta las lápidas más viejas que TOMBSTONE_DAYS. */
+export function pruneDeleted(deleted = {}, now = Date.now()) {
+  const cutoff = new Date(now - TOMBSTONE_DAYS * 86400000).toISOString()
+  return Object.fromEntries(Object.entries(deleted).filter(([, at]) => at >= cutoff))
 }
 
 /** Descarga la colección como archivo JSON. */
@@ -63,12 +100,15 @@ export async function parseBackupFile(file) {
   return items.filter((it) => it && it.name && it.source)
 }
 
-/** Combina un respaldo con la colección actual (por uid: lo ya existente no se duplica ni se pisa). */
-export function mergeCollections(current, imported) {
-  const seen = new Set(current.map((it) => it.uid))
-  const merged = [...current]
+/**
+ * Combina dos colecciones por uid: lo que ya está en `current` no se duplica
+ * ni se pisa, y lo que figura en `deleted` no entra desde ningún lado.
+ */
+export function mergeCollections(current, imported, deleted = {}) {
+  const merged = current.filter((it) => !deleted[it.uid])
+  const seen = new Set(merged.map((it) => it.uid))
   for (const it of imported) {
-    if (it.uid && seen.has(it.uid)) continue // ya está, no duplicar
+    if (it.uid && (seen.has(it.uid) || deleted[it.uid])) continue
     const uid = it.uid || newUid()
     seen.add(uid)
     merged.push({ ...it, uid })

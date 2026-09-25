@@ -2,14 +2,21 @@
  * Cliente de los datos estáticos generados por scripts/fetch-data.mjs
  * (precios oficiales de TCGPlayer vía tcgcsv.com, actualizados a diario
  * por GitHub Actions). Todo se sirve desde el mismo origen → sin CORS.
+ *
+ * Dos tipos de archivo:
+ *  - {pk|op}-index.json: índice liviano por juego para buscar por nombre o
+ *    código. Sus resultados NO traen precios: se completan con
+ *    getByProductId() recién cuando el usuario elige una carta.
+ *  - products/{shard}.json: fichas completas (precios incluidos), agrupadas
+ *    por rango de productId.
  */
 
 const DATA_BASE = `${import.meta.env.BASE_URL}data`
 
-let shardSize = 20000
+let shardSize = 10000
 let metaPromise = null
 const shardCache = new Map()
-let opIndexPromise = null
+const indexCache = new Map() // game → Promise<{sets, cards}>
 
 async function fetchLocal(path, { fresh = false } = {}) {
   const res = await fetch(`${DATA_BASE}/${path}`, fresh ? { cache: 'no-cache' } : {})
@@ -41,14 +48,32 @@ async function loadShard(productId, { fresh = false } = {}) {
   return shardCache.get(key)
 }
 
-function loadOpIndex() {
-  if (!opIndexPromise) {
-    opIndexPromise = fetchLocal('op-index.json').catch(() => ({ codes: {}, cards: [] }))
+function loadIndex(game) {
+  if (!indexCache.has(game)) {
+    indexCache.set(
+      game,
+      fetchLocal(`${game}-index.json`).catch(() => ({ sets: [], cards: [] }))
+    )
   }
-  return opIndexPromise
+  return indexCache.get(game)
 }
 
-/** entrada cruda del shard → resultado normalizado para la app */
+/** ¿Hay índice local para este juego? (falso si los datos no se generaron) */
+export async function hasIndex(game) {
+  const idx = await loadIndex(game)
+  return idx.cards.length > 0
+}
+
+/** Imagen estándar del CDN de TCGPlayer; el pipeline no la guarda porque se deduce del id. */
+export function imageUrl(productId) {
+  return `https://tcgplayer-cdn.tcgplayer.com/product/${productId}_200w.jpg`
+}
+
+function productUrl(productId) {
+  return `https://www.tcgplayer.com/product/${productId}`
+}
+
+/** entrada cruda del shard → ficha completa normalizada para la app */
 function normalize(productId, e) {
   if (!e) return null
   const variants = {}
@@ -63,39 +88,57 @@ function normalize(productId, e) {
     set: e.set,
     num: e.num,
     rarity: e.r,
-    img: e.img,
-    url: `https://www.tcgplayer.com/product/${productId}`,
+    img: 'img' in e ? e.img : imageUrl(productId),
+    url: productUrl(productId),
     variants,
   }
 }
 
-/** Busca un producto por productId de TCGPlayer (de la URL pegada). */
+/** entrada del índice → resultado liviano (sin `variants`; ver getByProductId) */
+function fromIndex(game, idx, [name, setIdx, num, pid]) {
+  return {
+    source: 'csv',
+    sourceId: pid,
+    game,
+    name,
+    set: idx.sets[setIdx] || '',
+    num,
+    img: imageUrl(pid),
+    url: productUrl(pid),
+  }
+}
+
+/** Ficha completa por productId de TCGPlayer (de la URL pegada o de un resultado del índice). */
 export async function getByProductId(productId, { fresh = false } = {}) {
   const shard = await loadShard(productId, { fresh })
   return normalize(productId, shard[productId])
 }
 
-/** Busca cartas One Piece por código exacto (OP01-001). Devuelve todas las variantes (normal / alt-art / manga…). */
+/** Cartas One Piece por código exacto (OP01-001): todas las versiones (normal / alt-art / manga…). */
 export async function getOpByCode(code) {
-  const idx = await loadOpIndex()
-  const ids = idx.codes[code] || []
-  const results = await Promise.all(ids.map((id) => getByProductId(id)))
-  return results.filter(Boolean)
+  const idx = await loadIndex('op')
+  return idx.cards.filter((c) => c[2] === code).map((c) => fromIndex('op', idx, c))
 }
 
-/** Búsqueda por nombre dentro de One Piece (índice local). */
-export async function searchOpByName(q, limit = 24) {
-  const idx = await loadOpIndex()
-  const needle = q.toLowerCase()
+/**
+ * Búsqueda por nombre en el índice local del juego. Todas las palabras tienen
+ * que aparecer en el nombre o el número ("charizard 125"). El índice viene
+ * ordenado del set más nuevo al más viejo, así que los primeros resultados
+ * son los más recientes.
+ */
+export async function searchByName(game, q, limit = 30) {
+  const idx = await loadIndex(game)
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean)
+  if (!words.length) return []
   const hits = []
-  for (const [code, name, set, pid] of idx.cards) {
-    if (name.toLowerCase().includes(needle)) {
-      hits.push({ code, name, set, pid })
+  for (const c of idx.cards) {
+    const hay = `${c[0]} ${c[2] || ''}`.toLowerCase()
+    if (words.every((w) => hay.includes(w))) {
+      hits.push(fromIndex(game, idx, c))
       if (hits.length >= limit) break
     }
   }
-  const results = await Promise.all(hits.map((h) => getByProductId(h.pid)))
-  return results.filter(Boolean)
+  return hits
 }
 
 /**
