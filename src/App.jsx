@@ -3,6 +3,7 @@ import AddCard from './components/AddCard.jsx'
 import CollectionTable from './components/CollectionTable.jsx'
 import Settings from './components/Settings.jsx'
 import GamePicker from './components/GamePicker.jsx'
+import PriceHistory from './components/PriceHistory.jsx'
 import Icon from './components/Icon.jsx'
 import logo from './assets/logo-tcg-vault.png'
 import {
@@ -15,7 +16,7 @@ import {
   pruneDeleted,
   tombstones,
 } from './lib/storage.js'
-import { totals, fmtMoney, fmtDate, GAME_LABEL, variantLabel } from './lib/helpers.js'
+import { totals, fmtMoney, fmtDate, fmtDelta, dirCls, GAME_LABEL, variantLabel, recordPrice, histOf } from './lib/helpers.js'
 import { getMeta, refreshCsvPrices } from './api/tcgcsv.js'
 import { refreshPtcgPrices } from './api/pokemontcg.js'
 import { syncEnabled, onAuthChange, signInWithGoogle, signOut, initialMerge, pushVault, onRemoteChange } from './api/sync.js'
@@ -24,6 +25,7 @@ import { syncEnabled, onAuthChange, signInWithGoogle, signOut, initialMerge, pus
 const TABS = [
   { id: 'col', icon: 'cards', label: 'Colección', title: 'Colección' },
   { id: 'add', icon: 'plus', label: '+ Agregar', title: 'Agregar carta' },
+  { id: 'hist', icon: 'chart', label: 'Precios', title: 'Evolución de precios' },
   { id: 'set', icon: 'sliders', label: 'Ajustes', title: 'Ajustes' },
 ]
 
@@ -35,8 +37,9 @@ const PUSH_DEBOUNCE_MS = 1000
 const snapshot = (items, deleted) => JSON.stringify({ items, deleted })
 
 /**
- * Aplica precios nuevos a una lista de cartas. `only` limita a un juego.
- * Devuelve la lista nueva y cuántas cartas cambiaron.
+ * Aplica precios nuevos a una lista de cartas y anota cada uno en su
+ * historial. `only` limita a un juego. Devuelve la lista nueva y cuántas
+ * cartas cambiaron.
  */
 function applyPrices(items, { csvMap, ptcgMap, now, only }) {
   let updated = 0
@@ -46,7 +49,7 @@ function applyPrices(items, { csvMap, ptcgMap, now, only }) {
     const price = map?.get(it.sourceId)?.[it.variant]?.market
     if (price == null) return it
     updated++
-    return { ...it, mkt: price, mktAt: now }
+    return { ...it, mkt: price, mktAt: now, hist: recordPrice(histOf(it), price, now) }
   })
   return { next, updated }
 }
@@ -63,6 +66,7 @@ export default function App() {
   const [deleted, setDeleted] = useState(() => pruneDeleted(loadDeleted()))
   const [game, setGame] = useState(null) // null = pantalla de elección de juego
   const [tab, setTab] = useState('col')
+  const [histFocus, setHistFocus] = useState(null) // uid de la carta elegida en «Precios»
   const [msg, setMsg] = useState('')
   const [refreshing, setRefreshing] = useState(null) // null | {done, total}
   const [user, setUser] = useState(null)
@@ -226,6 +230,7 @@ export default function App() {
           paid: avgPaid(dup, item, have),
           mkt: item.mkt ?? dup.mkt,
           mktAt: item.mkt != null ? item.mktAt : dup.mktAt,
+          hist: item.mkt != null ? recordPrice(histOf(dup), item.mkt, item.mktAt) : histOf(dup),
         })
         setTab('col')
         toast(`«${item.name}»: ahora tenés ${have + item.qty}.`)
@@ -269,6 +274,12 @@ export default function App() {
   function pickGame(id) {
     setGame(id)
     setTab('col')
+  }
+
+  /** Desde el modal de una carta: abre «Precios» con esa carta elegida. */
+  function showHistory(uid) {
+    setHistFocus(uid)
+    setTab('hist')
   }
 
   async function refreshPrices() {
@@ -316,12 +327,17 @@ export default function App() {
         <div className="stats">
           <Stat label="Cartas" value={t.cards.toLocaleString()} />
           <Stat label="Valor de mercado" value={fmtMoney(t.value)} />
-          <Stat label="Invertido" value={t.invested ? fmtMoney(t.invested) : '—'} />
           <Stat
-            label="G/P"
-            value={t.invested ? `${t.pl >= 0 ? '+' : ''}${fmtMoney(t.pl)}` : '—'}
-            className={t.invested ? (t.pl >= 0 ? 'gain' : 'loss') : ''}
+            label="Desde que las agregaste"
+            value={t.initial ? fmtDelta({ abs: t.change, pct: t.change / t.initial }) : '—'}
+            className={dirCls(t.change)}
           />
+          {t.invested > 0 && (
+            <>
+              <Stat label="Invertido" value={fmtMoney(t.invested)} />
+              <Stat label="G/P vs pagado" value={fmtDelta({ abs: t.pl, pct: t.pl / t.invested })} className={dirCls(t.pl)} />
+            </>
+          )}
         </div>
         {syncEnabled && (
           <div className="auth">
@@ -388,8 +404,11 @@ export default function App() {
 
       <main>
         {!game && <GamePicker items={items} onPick={pickGame} />}
-        {game && tab === 'col' && <CollectionTable items={scoped} game={game} onUpdate={updateItem} onRemove={removeItem} />}
+        {game && tab === 'col' && (
+          <CollectionTable items={scoped} game={game} onUpdate={updateItem} onRemove={removeItem} onShowHistory={showHistory} />
+        )}
         {game && tab === 'add' && <AddCard game={game} onAdd={addItem} />}
+        {game && tab === 'hist' && <PriceHistory items={scoped} game={game} focus={histFocus} onFocus={setHistFocus} />}
         {game && tab === 'set' && (
           <Settings items={items} deleted={deleted} onReplaceCollection={replaceCollection} toast={toast} />
         )}

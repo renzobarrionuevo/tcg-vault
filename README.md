@@ -6,8 +6,9 @@ App web para registrar tu colección de cartas de **Pokémon TCG** y **One Piece
 
 - **Registrar cartas** pegando la **URL de tcgplayer.com** (ej: `https://www.tcgplayer.com/product/543603/...`), el **código de la carta** (`OP01-001`, `ST13-003` para One Piece; `sv4-123` para Pokémon) o buscando por **nombre** (`charizard 125`, `zoro`). La búsqueda por nombre es local, sobre un índice de los dos juegos que se genera con los precios: no depende de ninguna API externa.
 - **Precios de TCGPlayer** (market / low / high) por variante (Normal, Foil, Holofoil, Reverse Holo…), regenerados **una vez por día** automáticamente y **aplicados solos al abrir la app** si el catálogo es más nuevo que tu último refresco.
-- Por cada carta: cantidad, condición (NM/LP/MP/HP/DMG), variante, precio pagado y **ganancia/pérdida** contra el precio de mercado actual. Si agregás una carta que ya tenés (misma variante y condición), te ofrece sumar la cantidad en vez de duplicar la fila.
+- Por cada carta: cantidad, condición (NM/LP/MP/HP/DMG), variante y una columna **Evolución** con un mini gráfico y cuánto subió o bajó desde el precio de mercado del día que la agregaste. Opcionalmente podés cargar lo que pagaste; en ese caso también se muestran invertido y ganancia contra ese precio. Si agregás una carta que ya tenés (misma variante y condición), te ofrece sumar la cantidad en vez de duplicar la fila.
 - Totales de la colección: cartas, invertido, valor de mercado y G/P. La tabla arranca ordenada por **mayor valor**.
+- **Evolución de precios**: cada actualización de precios queda registrada por carta, y la pestaña **Precios** grafica el valor de la colección contra lo invertido y, por carta, el precio de mercado contra lo que pagaste. El historial arranca el día que agregás la carta (o el primer refresco después de esta versión); como mucho se guardan 200 puntos por carta.
 - **Respaldo**: exportar/importar tu colección como JSON.
 
 ## Cómo funciona (arquitectura)

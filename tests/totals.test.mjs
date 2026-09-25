@@ -15,6 +15,16 @@ test('la ganancia solo compara cartas con precio pagado y de mercado', () => {
   assert.equal(t.priced, 3)
 })
 
+test('la variación desde el alta compara con el primer precio registrado', () => {
+  const t = totals([
+    { qty: 2, mkt: 3, mktAt: '2026-09-25T00:00:00.000Z', hist: [[20700, 2], [20720, 3]] }, // +1 × 2
+    { qty: 1, mkt: 10, mktAt: '2026-09-25T00:00:00.000Z' }, // sin hist: su último precio es el inicial → 0
+    { qty: 5, mkt: null }, // sin precio: no cuenta
+  ])
+  assert.equal(t.initial, 14)
+  assert.equal(t.change, 2)
+})
+
 test('rarezas de pokemontcg.io se traducen al vocabulario de TCGPlayer', () => {
   const rows = rarityCounts(
     [

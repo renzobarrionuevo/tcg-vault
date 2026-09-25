@@ -16,6 +16,11 @@
   --on-brand: #1b1205;
   --gain: #3fb950;
   --loss: #f85149;
+  /* series de los gráficos (validadas para daltonismo sobre --bg2): azul = valor
+     de mercado, naranja = invertido; la grilla es un paso apenas más claro que el fondo */
+  --chart-1: #4f8ff7;
+  --chart-2: #d95926;
+  --chart-grid: #222b37;
   --radius: 10px;
 }
 
@@ -799,9 +804,34 @@ input.qty {
   text-align: right;
 }
 
-input.paid {
-  width: 84px;
-  text-align: right;
+/* columna «Evolución»: mini gráfico + variación, del color de la dirección */
+.evo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  color: var(--muted); /* sin cambio; .gain / .loss lo pintan */
+}
+
+.evo .spark {
+  flex-shrink: 0;
+  display: block;
+}
+
+.evo-num {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.15;
+}
+
+.evo-num b {
+  font-variant-numeric: tabular-nums;
+}
+
+.evo-num small {
+  font-size: 0.72rem;
+  color: var(--muted);
 }
 
 /* ── carta en grande (modal) ────────────── */
@@ -951,6 +981,260 @@ input.paid {
   font-size: 1rem;
 }
 
+/* ── evolución de precios ───────────────── */
+.history section {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+
+.history h3 {
+  margin: 0 0 6px;
+}
+
+.history .row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+
+.history select {
+  max-width: 100%;
+}
+
+.tiles {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 10px 0 14px;
+}
+
+.tiles .stat {
+  background: var(--bg3);
+}
+
+.hist-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.hist-card img {
+  width: 42px;
+  border-radius: 4px;
+}
+
+.legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 4px 0 6px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* clave de línea: un trazo corto del color de la serie, junto al texto */
+.chart-key {
+  display: inline-block;
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+.chart {
+  position: relative;
+}
+
+.chart svg {
+  display: block;
+  max-width: 100%;
+  font-family: inherit;
+}
+
+.chart-grid,
+.chart-axis {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+}
+
+.chart-axis {
+  stroke: var(--border);
+}
+
+.chart-tick {
+  fill: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-end {
+  fill: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* anillo del color del fondo, para que el punto se lea sobre la línea */
+.chart-dot {
+  stroke: var(--bg2);
+  stroke-width: 2;
+}
+
+/* línea de referencia (lo que pagaste): punteada a propósito, es un umbral, no grilla */
+.chart-ref {
+  stroke: var(--muted);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+.chart-ref-label {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.chart-cross {
+  stroke: var(--muted);
+  stroke-width: 1;
+}
+
+.chart-overlay {
+  cursor: crosshair;
+  outline: none;
+}
+
+.chart-overlay:focus-visible {
+  outline: 1px solid var(--accent);
+}
+
+.chart-tip {
+  position: absolute;
+  pointer-events: none;
+  z-index: 2;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 0.35);
+}
+
+.chart-tip strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.chart-tip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chart-tip-row .chart-key {
+  margin-right: 0;
+}
+
+.chart-tip-row b {
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-tip-row span {
+  color: var(--muted);
+}
+
+.chart-table {
+  margin-top: 6px;
+  font-size: 0.8rem;
+}
+
+.chart-table summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.chart-table table {
+  margin-top: 6px;
+  max-height: 240px;
+}
+
+.chart-table th,
+.chart-table td {
+  padding: 4px 10px;
+}
+
+.movers {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.movers button {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg3);
+  color: var(--text);
+  font-size: 0.85rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.movers button:hover,
+.movers button.on {
+  border-color: var(--accent);
+}
+
+.movers small {
+  color: var(--muted);
+}
+
+.movers b {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* botón que parece enlace (en la leyenda del modal) */
+.link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.link-btn .icon {
+  width: 15px;
+  height: 15px;
+}
+
+.modal-links {
+  display: flex;
+  gap: 14px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
 /* ── varios ─────────────────────────────── */
 .empty {
   text-align: center;
@@ -1024,8 +1308,9 @@ footer a {
     width: 100%;
   }
 
+  /* cuatro totales → grilla de 2×2 */
   .stat {
-    flex: 1;
+    flex: 1 1 40%;
     min-width: 90px;
   }
 

@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react'
 import RarityBar from './RarityBar.jsx'
 import CardModal from './CardModal.jsx'
-import { GAME_LABEL, variantLabel, fmtMoney, fmtDate, CONDITIONS, marketOf } from '../lib/helpers.js'
+import Sparkline from './Sparkline.jsx'
+import { GAME_LABEL, variantLabel, fmtMoney, fmtDate, fmtDay, fmtDelta, CONDITIONS, marketOf, priceStats, dirCls } from '../lib/helpers.js'
 
 /** Órdenes disponibles; el primero es el que se usa al entrar. */
 const SORTS = {
   value: { label: 'Mayor valor', fn: (a, b) => valueOf(b) - valueOf(a) },
-  pl: { label: 'Mayor ganancia', fn: (a, b) => plOf(b) - plOf(a) },
+  up: { label: 'Mayor suba', fn: (a, b) => changeOf(b, -Infinity) - changeOf(a, -Infinity) },
+  down: { label: 'Mayor baja', fn: (a, b) => changeOf(a, Infinity) - changeOf(b, Infinity) },
   added: { label: 'Más recientes', fn: (a, b) => (b.addedAt || '').localeCompare(a.addedAt || '') },
   name: { label: 'Nombre', fn: (a, b) => (a.name || '').localeCompare(b.name || '') },
 }
@@ -18,14 +20,14 @@ function valueOf(it) {
   return m == null ? -Infinity : m * (it.qty || 1)
 }
 
-function plOf(it) {
-  const m = marketOf(it)
-  if (m == null || it.paid == null) return -Infinity
-  return (m - it.paid) * (it.qty || 1)
+/** Variación total de la fila desde que se agregó (× cantidad); sin datos → `none`. */
+function changeOf(it, none) {
+  const d = priceStats(it).vsFirst
+  return d ? d.abs * (it.qty || 1) : none
 }
 
 /** Recibe los items ya acotados a un juego (App decide cuál). */
-export default function CollectionTable({ items, game, onUpdate, onRemove }) {
+export default function CollectionTable({ items, game, onUpdate, onRemove, onShowHistory }) {
   const [text, setText] = useState('')
   const [sort, setSort] = useState(DEFAULT_SORT)
   const [preview, setPreview] = useState(null) // posición (en `filtered`) de la carta abierta en grande
@@ -79,10 +81,11 @@ export default function CollectionTable({ items, game, onUpdate, onRemove }) {
               <th>Variante</th>
               <th>Cond.</th>
               <th className="num">Cant.</th>
-              <th className="num">Pagado (u.)</th>
               <th className="num">Mercado (u.)</th>
               <th className="num">Valor</th>
-              <th className="num">G/P</th>
+              <th className="num" title="Cambio del valor desde el día que agregaste la carta">
+                Evolución
+              </th>
               <th></th>
             </tr>
           </thead>
@@ -91,7 +94,9 @@ export default function CollectionTable({ items, game, onUpdate, onRemove }) {
               const m = marketOf(it)
               const qty = it.qty || 1
               const value = m != null ? m * qty : null
-              const pl = m != null && it.paid != null ? (m - it.paid) * qty : null
+              const stats = priceStats(it)
+              const d = stats.vsFirst // variación unitaria desde que se agregó
+              const change = d ? { abs: d.abs * qty, pct: d.pct } : null
               return (
                 <tr key={it.uid}>
                   <td>
@@ -134,23 +139,29 @@ export default function CollectionTable({ items, game, onUpdate, onRemove }) {
                       onChange={(e) => onUpdate(it.uid, { qty: Math.max(1, Number(e.target.value) || 1) })}
                     />
                   </td>
-                  <td className="num">
-                    <input
-                      className="paid"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={it.paid ?? ''}
-                      placeholder="—"
-                      onChange={(e) => onUpdate(it.uid, { paid: e.target.value === '' ? null : Math.max(0, Number(e.target.value)) })}
-                    />
-                  </td>
                   <td className="num" title={it.mktAt ? `Actualizado: ${fmtDate(it.mktAt)}` : ''}>
                     {fmtMoney(m)}
                   </td>
                   <td className="num">{fmtMoney(value)}</td>
-                  <td className={`num ${pl == null ? '' : pl >= 0 ? 'gain' : 'loss'}`}>
-                    {pl == null ? '—' : `${pl >= 0 ? '+' : ''}${fmtMoney(pl)}`}
+                  <td
+                    className="num"
+                    title={
+                      d
+                        ? `Al agregarla (${fmtDay(d.since)}): ${fmtMoney(stats.hist[0][1])} · hoy ${fmtMoney(stats.now)} por unidad`
+                        : 'Sin precio de mercado registrado'
+                    }
+                  >
+                    {change ? (
+                      <div className={`evo ${dirCls(change)}`}>
+                        <Sparkline hist={stats.hist} />
+                        <div className="evo-num">
+                          <b>{fmtDelta({ abs: change.abs })}</b>
+                          {change.pct != null && <small>{`${change.pct >= 0 ? '+' : ''}${Math.round(change.pct * 100)}%`}</small>}
+                        </div>
+                      </div>
+                    ) : (
+                      '—'
+                    )}
                   </td>
                   <td>
                     <button
@@ -169,7 +180,16 @@ export default function CollectionTable({ items, game, onUpdate, onRemove }) {
       </div>
 
       {preview != null && (
-        <CardModal cards={filtered} index={preview} onIndexChange={setPreview} onClose={() => setPreview(null)} />
+        <CardModal
+          cards={filtered}
+          index={preview}
+          onIndexChange={setPreview}
+          onClose={() => setPreview(null)}
+          onShowHistory={(c) => {
+            setPreview(null)
+            onShowHistory(c.uid)
+          }}
+        />
       )}
     </div>
   )

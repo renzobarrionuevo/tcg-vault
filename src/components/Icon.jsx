@@ -49,6 +49,13 @@ const PATHS = {
   // chevrones ‹ › → anterior / siguiente en el modal
   prev: <path d="M15 5l-7 7 7 7" />,
   next: <path d="M9 5l7 7-7 7" />,
+  // línea que sube → evolución de precios
+  chart: (
+    <>
+      <path d="M4 19h16" />
+      <path d="M5 15l4-5 4 3 6-7" />
+    </>
+  ),
   // flecha circular → actualizar precios
   refresh: (
     <>

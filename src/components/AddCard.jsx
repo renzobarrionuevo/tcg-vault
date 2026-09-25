@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { search } from '../lib/search.js'
 import { getByProductId } from '../api/tcgcsv.js'
 import CardModal from './CardModal.jsx'
-import { GAME_LABEL, variantLabel, defaultVariant, fmtMoney, CONDITIONS } from '../lib/helpers.js'
+import { GAME_LABEL, variantLabel, defaultVariant, fmtMoney, CONDITIONS, recordPrice } from '../lib/helpers.js'
 import { newUid } from '../lib/storage.js'
 
 /** Alta de cartas acotada a un juego: lo que sea del otro no se puede agregar acá. */
@@ -142,6 +142,7 @@ function AddForm({ card, onAdd, onPreview }) {
 
   function submit(e) {
     e.preventDefault()
+    const now = new Date().toISOString()
     onAdd({
       uid: newUid(),
       source: card.source,
@@ -158,8 +159,9 @@ function AddForm({ card, onAdd, onPreview }) {
       cond,
       paid: paid === '' || Number.isNaN(Number(paid)) ? null : Math.max(0, Number(paid)),
       mkt: market ?? null,
-      mktAt: market != null ? new Date().toISOString() : null,
-      addedAt: new Date().toISOString(),
+      mktAt: market != null ? now : null,
+      hist: recordPrice([], market, now), // el historial de precios arranca hoy
+      addedAt: now,
     })
   }
 

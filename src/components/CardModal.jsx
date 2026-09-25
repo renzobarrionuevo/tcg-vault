@@ -8,7 +8,7 @@ import { GAME_LABEL, largeImage } from '../lib/helpers.js'
  * pasan a la anterior / siguiente. Se cierra con la X, con Escape o tocando
  * afuera.
  */
-export default function CardModal({ cards, index, onIndexChange, onClose }) {
+export default function CardModal({ cards, index, onIndexChange, onClose, onShowHistory }) {
   const card = cards[index]
   const hasPrev = index > 0
   const hasNext = index < cards.length - 1
@@ -67,11 +67,18 @@ export default function CardModal({ cards, index, onIndexChange, onClose }) {
             {card.num ? ` · ${card.num}` : ''}
             {card.rarity ? ` · ${card.rarity}` : ''}
           </span>
-          {card.url && (
-            <a href={card.url} target="_blank" rel="noreferrer" className="ext-link">
-              Ver en TCGPlayer ↗
-            </a>
-          )}
+          <span className="modal-links">
+            {card.url && (
+              <a href={card.url} target="_blank" rel="noreferrer" className="ext-link">
+                Ver en TCGPlayer ↗
+              </a>
+            )}
+            {onShowHistory && (
+              <button type="button" className="link-btn" onClick={() => onShowHistory(card)}>
+                <Icon name="chart" /> Evolución de precio
+              </button>
+            )}
+          </span>
           {cards.length > 1 && (
             <span className="modal-count">
               {index + 1} / {cards.length}

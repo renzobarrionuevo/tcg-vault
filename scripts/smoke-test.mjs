@@ -58,7 +58,9 @@ check('cantidad = 2', (await page.inputValue('tbody tr:first-child input.qty')) 
 // totales
 const stats = await page.textContent('.stats')
 check('total cartas = 2', /Cartas2/.test(stats.replace(/\s/g, '')))
-check('G/P calculada', /[+-]\$/.test(stats))
+check('variación desde el alta en el header', /[+-]\$/.test(stats))
+check('columna Evolución con mini gráfico', (await page.$('tbody tr:first-child .evo .spark')) !== null)
+check('columna Pagado eliminada', (await page.$('th:has-text("Pagado")')) === null)
 
 // edición de cantidad
 await page.fill('tbody tr:first-child input.qty', '3')
@@ -91,7 +93,6 @@ check('modal con la carta grande', (await page.getAttribute('.modal img', 'src')
 check('leyenda del modal', (await page.textContent('.modal-caption')).includes('Sabo (001)'))
 await page.keyboard.press('Escape')
 await page.waitForSelector('.modal', { state: 'detached', timeout: 3000 })
-check('Escape cierra el modal', true)
 
 // borrar: la fila desaparece
 await page.click('tbody tr:first-child button[title="Eliminar"]')
@@ -134,6 +135,24 @@ await page.keyboard.press('ArrowLeft')
 check('tecla ← vuelve a la anterior', (await page.textContent('.modal-caption strong')) === 'Charizard ex')
 await page.keyboard.press('Escape')
 await page.waitForSelector('.modal', { state: 'detached', timeout: 3000 })
+
+// evolución de precios: gráfico de la colección y por carta; desde el modal se salta con la carta elegida
+await page.click('nav button[title="Evolución de precios"]')
+await page.waitForSelector('.history svg')
+check('gráfico de la colección', (await page.$$('.history svg')).length === 2)
+check('selector con las dos cartas', (await page.$$('.history select option')).length === 2)
+check('por carta: precio de hoy', (await page.textContent('.history section:nth-of-type(2) .tiles')).includes('$12.50'))
+await page.hover('.history section:nth-of-type(2) .chart-overlay')
+await page.waitForSelector('.chart-tip', { timeout: 3000 })
+check('tooltip al pasar el puntero', (await page.textContent('.chart-tip')).includes('$12.50'))
+await page.click('nav button[title="Colección"]')
+await page.click('tbody tr:nth-child(2) .thumb-btn')
+await page.waitForSelector('.modal')
+await page.click('.modal .link-btn')
+await page.waitForSelector('.history svg')
+check('desde el modal abre «Precios» con esa carta', (await page.textContent('.hist-card strong')) === 'Brute Bonnet')
+check('Escape cierra el modal', true)
+
 
 // export JSON
 await page.click('nav button[title="Ajustes"]')
