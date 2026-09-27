@@ -89,9 +89,27 @@ function vaultRef(uid) {
   return fsMod.doc(db, 'vaults', uid)
 }
 
+/**
+ * Firestore no admite arrays anidados, y el historial de precios de cada
+ * carta es una lista de pares [día, precio]. En el documento va aplanado
+ * ([día, precio, día, precio, …]) y se vuelve a armar al leer.
+ */
+export function packItems(items) {
+  return items.map((it) => (Array.isArray(it.hist) ? { ...it, hist: it.hist.flat() } : it))
+}
+
+export function unpackItems(items) {
+  return (items || []).map((it) => {
+    if (!Array.isArray(it.hist) || !it.hist.length || Array.isArray(it.hist[0])) return it
+    const hist = []
+    for (let i = 0; i + 1 < it.hist.length; i += 2) hist.push([it.hist[i], it.hist[i + 1]])
+    return { ...it, hist }
+  })
+}
+
 /** documento crudo de Firestore → { items, deleted } */
 function fromDoc(data) {
-  return { items: data?.items || [], deleted: data?.deleted || {} }
+  return { items: unpackItems(data?.items), deleted: data?.deleted || {} }
 }
 
 /**
@@ -115,7 +133,7 @@ export async function pushVault(uid, { items, deleted }) {
   await init()
   const { fsMod } = fb
   await fsMod.setDoc(vaultRef(uid), {
-    items,
+    items: packItems(items),
     deleted: deleted || {},
     updatedAt: new Date().toISOString(),
     updatedBy: CLIENT_ID,
