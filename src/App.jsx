@@ -70,6 +70,7 @@ export default function App() {
   const [msg, setMsg] = useState('')
   const [refreshing, setRefreshing] = useState(null) // null | {done, total}
   const [user, setUser] = useState(null)
+  const [authReady, setAuthReady] = useState(!syncEnabled) // true cuando ya se sabe si hay sesión o no
   // estado de la nube: 'off' | 'syncing' | 'saved' | 'pending' | 'error'
   const [cloud, setCloud] = useState({ state: 'off', at: null })
   const synced = useRef(false) // true recién cuando terminó la combinación inicial
@@ -82,7 +83,10 @@ export default function App() {
   // sesión de Google (si Firebase está configurado)
   useEffect(() => {
     if (!syncEnabled) return
-    return onAuthChange(setUser)
+    return onAuthChange((u) => {
+      setUser(u)
+      setAuthReady(true)
+    })
   }, [])
 
   // al iniciar sesión: PRIMERO bajar la nube y combinar; hasta que eso no
@@ -99,7 +103,8 @@ export default function App() {
     setCloud({ state: 'syncing', at: null })
     ;(async () => {
       try {
-        const merged = await initialMerge(user.uid, vault.current)
+        // lo local se lee recién después de bajar la nube (ver initialMerge)
+        const merged = await initialMerge(user.uid, () => vault.current)
         if (cancelled) return
         lastPushed.current = snapshot(merged.items, merged.deleted)
         synced.current = true
@@ -184,8 +189,15 @@ export default function App() {
   }, [user])
 
   // precios al día al abrir: si el catálogo diario es más nuevo que el último
-  // refresco de alguna carta, se actualiza sola (mismo origen, sin límites)
+  // refresco de alguna carta, se actualiza sola (mismo origen, sin límites).
+  // Espera a saber si hay sesión y, si la hay, a que termine la sincronización
+  // inicial: si corriera en paralelo, la combinación con la nube pisaría los
+  // precios recién bajados y sus puntos de historial.
+  const autoRefreshed = useRef(false)
   useEffect(() => {
+    if (autoRefreshed.current || !authReady) return
+    if (user && cloud.state !== 'saved' && cloud.state !== 'error') return
+    autoRefreshed.current = true
     let cancelled = false
     ;(async () => {
       const meta = await getMeta()
@@ -205,7 +217,7 @@ export default function App() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [authReady, user, cloud.state])
 
   function toast(text) {
     setMsg(text)
@@ -386,7 +398,7 @@ export default function App() {
           <button
             className="btn primary"
             onClick={refreshPrices}
-            disabled={!!refreshing || !scoped.length}
+            disabled={!!refreshing || !scoped.length || cloud.state === 'syncing'}
             title="Actualizar precios"
             aria-label="Actualizar precios"
           >

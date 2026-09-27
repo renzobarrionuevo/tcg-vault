@@ -115,12 +115,17 @@ function fromDoc(data) {
 /**
  * Baja lo remoto, lo combina con lo local ({ items, deleted }) y sube el
  * resultado. Devuelve el combinado.
+ *
+ * `getLocal` es una función y se llama recién DESPUÉS de bajar la nube: lo
+ * local puede cambiar mientras tanto (por ejemplo, el refresco automático de
+ * precios), y combinar con una copia vieja pisaría esos cambios.
  */
-export async function initialMerge(uid, local) {
+export async function initialMerge(uid, getLocal) {
   await init()
   const { fsMod } = fb
   const snap = await fsMod.getDoc(vaultRef(uid))
   const remote = fromDoc(snap.exists() ? snap.data() : null)
+  const local = getLocal()
   const deleted = pruneDeleted(mergeDeleted(remote.deleted, local.deleted))
   const items = mergeCollections(remote.items, local.items, deleted)
   const merged = { items, deleted }
