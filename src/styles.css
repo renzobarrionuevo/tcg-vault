@@ -810,7 +810,17 @@ input.qty {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  color: var(--muted); /* sin cambio; .gain / .loss lo pintan */
+  color: var(--muted); /* sin cambio */
+}
+
+/* subida en verde, bajada en rojo: la línea del mini gráfico y el monto heredan
+   este color (van más específicas que .evo para que no las pise) */
+.evo.gain {
+  color: var(--gain);
+}
+
+.evo.loss {
+  color: var(--loss);
 }
 
 .evo .spark {
