@@ -98,6 +98,7 @@ assert.deepEqual(shard47['477892'].p.Holofoil, { m: 0.95, l: 0.5, h: 10 })
 
 const opIndex = JSON.parse(await readFile(join(ROOT, 'public/data/op-index.json'), 'utf8'))
 assert.deepEqual(opIndex.sets, ['Ultra Deck: The Three Brothers'])
+assert.deepEqual(opIndex.abbr, ['ST13'])
 assert.deepEqual(opIndex.cards, [
   ['Sabo (001)', 0, 'ST13-001', 543603], // código normalizado a mayúsculas
   ['Ultra Deck: The Three Brothers', 0, null, 543595], // sellado: entra al índice sin código
@@ -105,6 +106,7 @@ assert.deepEqual(opIndex.cards, [
 
 const pkIndex = JSON.parse(await readFile(join(ROOT, 'public/data/pk-index.json'), 'utf8'))
 assert.deepEqual(pkIndex.sets, ['SV04: Paradox Rift', 'SV01: Scarlet & Violet Base Set'], 'sets del más nuevo al más viejo')
+assert.deepEqual(pkIndex.abbr, ['PAR', 'SVI'], 'abreviaturas en el mismo orden')
 assert.deepEqual(pkIndex.cards, [
   ['Brute Bonnet', 0, '123/182', 610001],
   ['Miraidon ex', 1, '081/198', 477892],

@@ -141,6 +141,40 @@ export async function searchByName(game, q, limit = 30) {
   return hits
 }
 
+const NUM_TOTAL_RE = /^(\d+)\s*\/\s*(\d+)$/ // "081/198"
+const TRAILING_NUM_RE = /^\D*(\d+)$/ // promos tipo "SVP001"
+
+/**
+ * Búsqueda por número de carta en el índice local: "125/182" (exacto),
+ * "125" (todas las cartas con ese número, en cualquier set) o con set:
+ * "PAR 125" (abreviatura) / "paradox 125" (parte del nombre del set).
+ * Los ceros a la izquierda no importan: 81/198 encuentra "081/198".
+ */
+export async function searchByNumber(game, { num, total = null, set = null }, limit = 30) {
+  const idx = await loadIndex(game)
+  const setTok = set ? set.toLowerCase() : null
+  const hits = []
+  for (const c of idx.cards) {
+    const n = c[2] || ''
+    const nt = NUM_TOTAL_RE.exec(n)
+    let ok = false
+    if (nt) ok = Number(nt[1]) === num && (total == null || Number(nt[2]) === total)
+    else if (total == null) {
+      const t = TRAILING_NUM_RE.exec(n)
+      ok = !!t && Number(t[1]) === num
+    }
+    if (!ok) continue
+    if (setTok) {
+      const abbr = (idx.abbr?.[c[1]] || '').toLowerCase()
+      const name = (idx.sets[c[1]] || '').toLowerCase()
+      if (abbr !== setTok && !name.includes(setTok)) continue
+    }
+    hits.push(fromIndex(game, idx, c))
+    if (hits.length >= limit) break
+  }
+  return hits
+}
+
 /**
  * Refresca precios de items 'csv': agrupa por shard, baja cada shard una vez
  * (sin caché del navegador) y devuelve un mapa productId → variants.

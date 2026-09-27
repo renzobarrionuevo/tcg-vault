@@ -111,6 +111,15 @@ check('precio Pokémon desde el shard', (await page.textContent('.af-market stro
 await page.click('button:has-text("Agregar a la colección")')
 await page.waitForSelector('table')
 
+// búsqueda por número: "125/182" exacto, "par 123" con abreviatura del set, "paradox 123" con nombre
+for (const [q, name] of [['125/182', 'Charizard ex'], ['par 123', 'Brute Bonnet'], ['paradox 123', 'Brute Bonnet'], ['123', 'Brute Bonnet']]) {
+  await page.click('nav button[title="Agregar carta"]')
+  await page.fill('.search-input', q)
+  await page.click('button:has-text("Buscar")')
+  await page.waitForSelector('.add-form', { timeout: 5000 })
+  check(`número «${q}» → ${name}`, (await page.textContent('.add-form h3')) === name)
+}
+
 // varios resultados → grilla, elegir uno carga los precios
 await page.click('nav button[title="Agregar carta"]')
 await page.fill('.search-input', 'e')

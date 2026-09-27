@@ -74,7 +74,11 @@ export default function AddCard({ onAdd, game }) {
           className="search-input"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={`Pegá la URL de TCGPlayer, un código (${game === 'op' ? 'OP01-001' : 'sv4-123'}) o un nombre…`}
+          placeholder={
+            game === 'op'
+              ? 'Pegá la URL de TCGPlayer, un código (OP01-001) o un nombre…'
+              : 'Pegá la URL de TCGPlayer, el número (125/182, PAR 125) o un nombre…'
+          }
           autoFocus
         />
         <button className="btn primary" disabled={busy || !query.trim()}>
@@ -83,7 +87,15 @@ export default function AddCard({ onAdd, game }) {
       </form>
       <p className="hint">
         Agregando a <b>{GAME_LABEL[game]}</b>. Ejemplos: <code>https://www.tcgplayer.com/product/543603/…</code> ·{' '}
-        <code>{game === 'op' ? 'OP01-121' : 'charizard 125'}</code> · <code>{game === 'op' ? 'zoro' : 'pikachu'}</code>
+        {game === 'op' ? (
+          <>
+            <code>OP01-121</code> · <code>zoro</code>
+          </>
+        ) : (
+          <>
+            <code>125/182</code> · <code>PAR 125</code> · <code>125</code> (todas las cartas con ese número) · <code>charizard</code>
+          </>
+        )}
       </p>
 
       {note && <p className="note">{note}</p>}

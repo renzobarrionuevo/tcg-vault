@@ -52,6 +52,7 @@ const products = {
 const indexes = {
   op: {
     sets: ['Ultra Deck: The Three Brothers'],
+    abbr: ['ST13'],
     cards: [
       ['Sabo (001)', 0, 'ST13-001', 543603],
       ['Ultra Deck: The Three Brothers', 0, null, 543595],
@@ -59,6 +60,7 @@ const indexes = {
   },
   pk: {
     sets: ['SV04: Paradox Rift'],
+    abbr: ['PAR'],
     cards: [
       ['Brute Bonnet', 0, '123/182', 610001],
       ['Charizard ex', 0, '125/182', 610002],

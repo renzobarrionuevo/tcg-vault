@@ -12,10 +12,12 @@
  *                              `img` solo va cuando NO es la URL estándar del CDN
  *                              (https://tcgplayer-cdn.tcgplayer.com/product/{id}_200w.jpg);
  *                              el cliente la reconstruye a partir del productId.
- *   {pk|op}-index.json       → índice de búsqueda por nombre de cada juego:
- *                              { sets: [nombre…], cards: [[nombre, iSet, num, productId]…] }
+ *   {pk|op}-index.json       → índice de búsqueda por nombre/número de cada juego:
+ *                              { sets: [nombre…], abbr: [abreviatura…], cards: [[nombre, iSet, num, productId]…] }
  *                              ordenado del set más nuevo al más viejo. Para One
- *                              Piece `num` es el código de carta (OP01-001).
+ *                              Piece `num` es el código de carta (OP01-001); para
+ *                              Pokémon es "125/182" y la abreviatura del set (PAR)
+ *                              permite buscar "PAR 125".
  *
  * Uso: node scripts/fetch-data.mjs [--only-group 68:23349]  (para pruebas)
  */
@@ -108,7 +110,7 @@ async function main() {
     groups.sort((a, b) => String(b.publishedOn || '').localeCompare(String(a.publishedOn || '')))
     console.log(`${groups.length} sets/grupos`)
 
-    const index = { sets: [], cards: [] }
+    const index = { sets: [], abbr: [], cards: [] }
     indexes[cat.game] = index
     let failed = 0
     let catProducts = 0
@@ -124,6 +126,7 @@ async function main() {
       }
       totalGroups++
       const setIdx = index.sets.push(group.name) - 1
+      index.abbr.push(group.abbreviation || '')
 
       // precios por productId → { subTypeName → {m,l,h} }
       const priceMap = new Map()
